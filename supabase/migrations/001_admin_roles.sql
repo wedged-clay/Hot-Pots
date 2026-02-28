@@ -187,15 +187,8 @@ CREATE POLICY "messages_admin_read"
   ON messages FOR SELECT
   USING (get_my_role() = 'admin');
 
--- Check constraint to block inserts after conversation expires
--- (This should already exist; included here for completeness)
-ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_not_expired;
-ALTER TABLE messages ADD CONSTRAINT messages_not_expired
-  CHECK (
-    sent_at <= (
-      SELECT expires_at FROM conversations WHERE id = conversation_id
-    )
-  );
+-- Note: expiry enforcement is handled by the messages_expiry_check trigger
+-- created in 000_schema.sql — no CHECK constraint needed here.
 
 
 -- ── push_subscriptions ──

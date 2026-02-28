@@ -162,11 +162,21 @@ ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 CREATE INDEX ON messages (conversation_id);
 CREATE INDEX ON messages (sender_id);
 
--- Block inserts after the conversation window closes
-ALTER TABLE messages ADD CONSTRAINT messages_not_expired
-  CHECK (
-    sent_at <= (SELECT expires_at FROM conversations WHERE id = conversation_id)
-  );
+-- Block inserts after the conversation window closes (trigger, not CHECK,
+-- because Postgres does not allow subqueries in CHECK constraints)
+CREATE OR REPLACE FUNCTION check_message_not_expired()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.sent_at > (SELECT expires_at FROM conversations WHERE id = NEW.conversation_id) THEN
+    RAISE EXCEPTION 'conversation has expired';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER messages_expiry_check
+  BEFORE INSERT ON messages
+  FOR EACH ROW EXECUTE FUNCTION check_message_not_expired();
 
 
 -- ── push_subscriptions ────────────────────────────────────────
