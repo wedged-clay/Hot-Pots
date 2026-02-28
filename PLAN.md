@@ -1,7 +1,7 @@
 # Hot—Pots — Project Plan
 
-**Last updated:** February 2026  
-**Status:** UI prototype complete · Backend not yet started
+**Last updated:** February 2026
+**Status:** Phase 1 complete · Phase 2 (auth) in progress
 
 ---
 
@@ -43,17 +43,16 @@ The UI prototype uses hardcoded mock objects at the top of `src/App.jsx` — `mo
 
 Everything below is backend integration and project scaffolding. The UI for all of it is already done.
 
-### Phase 1 — Project Setup (1–2 days)
-*Do this before any other dev work.*
+### Phase 1 — Project Setup ✅ Complete
 
-- [ ] Create GitHub repository and push all files
-- [ ] Set up Vite + React project structure (`npm create vite@latest`)
-- [ ] Move files into correct directories (see README for structure)
-- [ ] Create Supabase project at supabase.com
-- [ ] Run `admin-roles.sql` migration in Supabase SQL Editor
-- [ ] Set first admin user (update the UUID in the SQL file)
-- [ ] Connect Vercel to GitHub repo
-- [ ] Add environment variables to Vercel
+- [x] Create GitHub repository and push all files
+- [x] Set up Vite + React project structure (package.json, index.html, vite.config.js, src/main.jsx)
+- [x] Move files into correct directories
+- [x] Create Supabase project at supabase.com
+- [x] Run migrations in Supabase SQL Editor (000_schema.sql, 001_admin_roles.sql)
+- [ ] Set first admin user (`UPDATE profiles SET role = 'admin' WHERE id = 'your-uuid'`)
+- [x] Connect Vercel to GitHub repo and deploy
+- [ ] Add environment variables to Vercel dashboard
 
 ### Phase 2 — Auth (2–3 days)
 
@@ -97,7 +96,8 @@ Everything below is backend integration and project scaffolding. The UI for all 
 
 ### Phase 6 — Push Notifications (1–2 days)
 
-- [ ] Generate VAPID keys: `npx web-push generate-vapid-keys`
+- [ ] Generate **real** VAPID keys: `npx web-push generate-vapid-keys`
+      ⚠️ Current keys in `.env` look like Supabase API keys, not VAPID keys — regenerate before this phase
 - [ ] Add keys to Supabase Edge Function secrets and `.env`
 - [ ] Deploy push-notify Edge Function: `supabase functions deploy push-notify`
 - [ ] Create `push_subscriptions` table (SQL in `PWA-SETUP.md`)

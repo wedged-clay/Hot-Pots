@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { supabase } from "../supabase/client";
 
 // ============================================================
 // AUTH FLOW — Hot—Pots (Supabase Auth)
@@ -338,13 +339,89 @@ export default function AuthScreens({ onAuthComplete }) {
   const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(false);
   const [pwdMismatch, setPwdMismatch] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
 
   const strength = pwdStrength(pwd);
   const initials = displayName.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2) || "?";
 
-  const fakeLoad = (cb) => {
-    setLoading(true);
-    setTimeout(() => { setLoading(false); cb(); }, 900);
+  const clearError = () => setAuthError("");
+
+  // ── Auth handlers ────────────────────────────────────────────
+
+  const handleSignIn = async () => {
+    setLoading(true); clearError();
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pwd });
+    setLoading(false);
+    if (error) { setAuthError(error.message); return; }
+    onAuthComplete?.();
+  };
+
+  const handleSignUp = async () => {
+    if (pwd !== confirmPwd) { setPwdMismatch(true); return; }
+    setLoading(true); clearError();
+    const { error } = await supabase.auth.signUp({
+      email,
+      password: pwd,
+      options: { data: { display_name: displayName } },
+    });
+    setLoading(false);
+    if (error) { setAuthError(error.message); return; }
+    setScreen("checkemail");
+  };
+
+  const handleMagicLink = async () => {
+    setLoading(true); clearError();
+    const { error } = await supabase.auth.signInWithOtp({ email });
+    setLoading(false);
+    if (error) { setAuthError(error.message); return; }
+    setScreen("checkemail");
+  };
+
+  const handleForgotPassword = async () => {
+    setLoading(true); clearError();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/?screen=newpwd`,
+    });
+    setLoading(false);
+    if (error) { setAuthError(error.message); return; }
+    setScreen("checkemail");
+  };
+
+  const handleNewPassword = async () => {
+    if (pwd !== confirmPwd) { setPwdMismatch(true); return; }
+    setLoading(true); clearError();
+    const { error } = await supabase.auth.updateUser({ password: pwd });
+    setLoading(false);
+    if (error) { setAuthError(error.message); return; }
+    setScreen("signin");
+  };
+
+  const handleInviteCode = async (code) => {
+    if (!code) { onAuthComplete?.(); return; } // skip
+    setLoading(true); clearError();
+    const { data, error } = await supabase
+      .from("studio_codes")
+      .select("id, used_count, max_uses")
+      .eq("code", code.toUpperCase())
+      .eq("active", true)
+      .single();
+    if (error || !data) {
+      setLoading(false);
+      setAuthError("Invalid or expired invite code.");
+      return;
+    }
+    if (data.max_uses !== null && data.used_count >= data.max_uses) {
+      setLoading(false);
+      setAuthError("This invite code has reached its limit.");
+      return;
+    }
+    await supabase
+      .from("studio_codes")
+      .update({ used_count: data.used_count + 1 })
+      .eq("id", data.id);
+    setLoading(false);
+    onAuthComplete?.();
   };
 
   // ── SPLASH ──────────────────────────────────────────────────
@@ -396,7 +473,7 @@ export default function AuthScreens({ onAuthComplete }) {
             <div className="auth-field">
               <label className="auth-label">Email</label>
               <input className="auth-input" type="email" placeholder="you@studio.com"
-                value={email} onChange={e=>setEmail(e.target.value)} />
+                value={email} onChange={e=>{ setEmail(e.target.value); clearError(); }} />
             </div>
 
             <div className="auth-field">
@@ -407,14 +484,16 @@ export default function AuthScreens({ onAuthComplete }) {
               <div className="auth-input-wrap">
                 <input className="auth-input" type={showPwd?"text":"password"}
                   placeholder="Your password"
-                  value={pwd} onChange={e=>setPwd(e.target.value)} />
+                  value={pwd} onChange={e=>{ setPwd(e.target.value); clearError(); }} />
                 <button className="eye-btn" onClick={()=>setShowPwd(p=>!p)}>{showPwd?"🙈":"👁️"}</button>
               </div>
             </div>
 
+            {authError && <div className="field-error" style={{marginBottom:8}}>⚠ {authError}</div>}
+
             <button className="auth-btn" style={{marginTop:20}}
               disabled={!email || !pwd || loading}
-              onClick={()=>fakeLoad(()=>setScreen("onboard1"))}>
+              onClick={handleSignIn}>
               {loading ? "Signing in…" : "Sign In"}
             </button>
 
@@ -492,12 +571,11 @@ export default function AuthScreens({ onAuthComplete }) {
               {pwdMismatch && <div className="field-error">⚠ Passwords don't match</div>}
             </div>
 
+            {authError && <div className="field-error" style={{marginBottom:8}}>⚠ {authError}</div>}
+
             <button className="auth-btn" style={{marginTop:8}}
               disabled={!displayName||!email||!pwd||!confirmPwd||loading}
-              onClick={()=>{
-                if (pwd !== confirmPwd) { setPwdMismatch(true); return; }
-                fakeLoad(()=>setScreen("checkemail"));
-              }}>
+              onClick={handleSignUp}>
               {loading ? "Creating account…" : "Create Account"}
             </button>
 
@@ -538,9 +616,11 @@ export default function AuthScreens({ onAuthComplete }) {
                 value={email} onChange={e=>setEmail(e.target.value)} />
             </div>
 
+            {authError && <div className="field-error" style={{marginBottom:8}}>⚠ {authError}</div>}
+
             <button className="auth-btn" style={{marginTop:20}}
               disabled={!email||loading}
-              onClick={()=>fakeLoad(()=>setScreen("checkemail"))}>
+              onClick={handleMagicLink}>
               {loading ? "Sending…" : "Send Magic Link ✨"}
             </button>
 
@@ -607,9 +687,11 @@ export default function AuthScreens({ onAuthComplete }) {
                 value={email} onChange={e=>setEmail(e.target.value)} />
             </div>
 
+            {authError && <div className="field-error" style={{marginBottom:8}}>⚠ {authError}</div>}
+
             <button className="auth-btn" style={{marginTop:20}}
               disabled={!email||loading}
-              onClick={()=>fakeLoad(()=>setScreen("checkemail"))}>
+              onClick={handleForgotPassword}>
               {loading ? "Sending…" : "Send Reset Link"}
             </button>
 
@@ -666,12 +748,11 @@ export default function AuthScreens({ onAuthComplete }) {
               {pwdMismatch && <div className="field-error">⚠ Passwords don't match</div>}
             </div>
 
+            {authError && <div className="field-error" style={{marginBottom:8}}>⚠ {authError}</div>}
+
             <button className="auth-btn" style={{marginTop:8}}
               disabled={!pwd||!confirmPwd||loading||strength.score<2}
-              onClick={()=>{
-                if (pwd!==confirmPwd) { setPwdMismatch(true); return; }
-                fakeLoad(()=>setScreen("signin"));
-              }}>
+              onClick={handleNewPassword}>
               {loading ? "Saving…" : "Set New Password"}
             </button>
           </div>
@@ -745,7 +826,8 @@ export default function AuthScreens({ onAuthComplete }) {
               <label className="auth-label">Studio Invite Code</label>
               <div className="studio-code-row">
                 <input className="auth-input" type="text" maxLength={6}
-                  placeholder="_ _ _ _ _ _" style={{textTransform:"uppercase"}} />
+                  placeholder="_ _ _ _ _ _" style={{textTransform:"uppercase"}}
+                  value={inviteCode} onChange={e=>{ setInviteCode(e.target.value.toUpperCase()); clearError(); }} />
               </div>
             </div>
 
@@ -753,12 +835,15 @@ export default function AuthScreens({ onAuthComplete }) {
               🏺 Don't have a code? Ask your studio admin — they can generate one from the admin dashboard.
             </div>
 
-            <button className="auth-btn"
-              onClick={()=>fakeLoad(()=>onAuthComplete?.())}>
+            {authError && <div className="field-error" style={{marginBottom:8}}>⚠ {authError}</div>}
+
+            <button className="auth-btn" disabled={loading}
+              onClick={()=>handleInviteCode(inviteCode)}>
               {loading ? "Verifying…" : "Join the Studio 🏺"}
             </button>
 
-            <button className="auth-btn-ghost" onClick={()=>fakeLoad(()=>onAuthComplete?.())}>
+            <button className="auth-btn-ghost" disabled={loading}
+              onClick={()=>onAuthComplete?.()}>
               Skip for now
             </button>
           </div>

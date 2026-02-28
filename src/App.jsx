@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { supabase } from "./supabase/client";
 import CameraCapture from "./components/CameraCapture";
 import AdminPortal from "./components/AdminPortal";
 import AuthScreens from "./components/auth-screens";
@@ -745,14 +746,21 @@ function PieceForm({ label, typeLabel, typeColor }) {
 
 // ─── Main App ─────────────────────────────────────────────────
 export default function HotPotsApp() {
-  // Auth gate — replaced by real Supabase session check in Phase 2
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Auth gate — real Supabase session
+  const [session, setSession] = useState(undefined); // undefined = loading, null = signed out
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
 
   // PWA — SW registration, install prompt, update detection, online status
   const { canInstall, installApp, updateAvailable, applyUpdate, isOnline } = usePWA();
 
-  if (!isAuthenticated) {
-    return <AuthScreens onAuthComplete={() => setIsAuthenticated(true)} />;
+  if (session === undefined) return null; // brief loading — avoid flash of auth screen
+  if (!session) {
+    return <AuthScreens onAuthComplete={() => {}} />;
   }
 
   // Read initial tab from URL param — enables deep links from push notifications
