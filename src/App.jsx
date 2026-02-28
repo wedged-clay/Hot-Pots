@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { supabase } from "./supabase/client";
 import CameraCapture from "./components/CameraCapture";
 import AdminPortal from "./components/AdminPortal";
@@ -109,60 +109,6 @@ const C = {
 
 const LOGO = `data:image/png;base64,${LOGO_B64}`;
 
-const mockUser = { name: "Maya Chen", initials: "MC", role: "admin" }; // role: "admin" | "helper" | "member"
-
-const mockRound = {
-  title: "February Fire Swap",
-  status: "open",
-  closes: "March 3, 2026",
-  participants: 14,
-  spots: 20,
-};
-
-const mockMatches = [
-  { id:1, round:"January Earth Exchange", partner:"Theo R.", partnerPiece:"Raku Bowl", myPiece:"Celadon Mug", type:"random" },
-  { id:2, round:"December Fire Swap", partner:"Lena K.", partnerPiece:"Salt-glazed Vase", myPiece:"Stoneware Cup", type:"choice" },
-];
-
-const mockConversations = [
-  {
-    id: "c1",
-    matchType: "random",
-    round: "February Fire Swap",
-    partner: { name: "Theo R.", initials: "TR" },
-    myPiece: "Celadon Mug",
-    theirPiece: "Raku Bowl",
-    expiresAt: new Date(Date.now() + 18 * 24 * 60 * 60 * 1000), // 18 days left
-    messages: [
-      { id:"m1", sender:"them", body:"Hey! So excited about our match — your Celadon Mug looks stunning in the photos 😍", time:"2:14 PM", date:"Today" },
-      { id:"m2", sender:"me",   body:"Thank you! Your Raku Bowl is gorgeous. Are you at the studio on Saturday?", time:"2:31 PM", date:"Today" },
-      { id:"m3", sender:"them", body:"Yes! I'll be there around 11am for the morning open session. Does that work?", time:"2:45 PM", date:"Today" },
-    ]
-  },
-  {
-    id: "c2",
-    matchType: "choice",
-    round: "February Fire Swap",
-    partner: { name: "Lena K.", initials: "LK" },
-    myPiece: "Stoneware Cup",
-    theirPiece: "Salt-glazed Vase",
-    expiresAt: new Date(Date.now() + 22 * 24 * 60 * 60 * 1000), // 22 days left
-    messages: [
-      { id:"m4", sender:"them", body:"Hi! I ranked your Stoneware Cup as my #1 — so happy we matched! 🏺", time:"10:02 AM", date:"Yesterday" },
-    ]
-  },
-];
-
-const mockGallery = [
-  { id:"g1", name:"Wheel-thrown Planter", maker:"Tomas W.", glaze:"Matte Teal", clay:"Stoneware", method:"wheel-thrown", img:"🪴" },
-  { id:"g2", name:"Yunomi Cup", maker:"Priya S.", glaze:"Wood Ash", clay:"Porcelain", method:"wheel-thrown", img:"🍵" },
-  { id:"g3", name:"Serving Bowl", maker:"Alex B.", glaze:"Speckled White", clay:"Earthenware", method:"hand-built", img:"🥣" },
-  { id:"g4", name:"Bud Vase", maker:"Lena K.", glaze:"Cobalt Blue", clay:"Stoneware", method:"wheel-thrown", img:"🏺" },
-  { id:"g5", name:"Espresso Set", maker:"Tomas W.", glaze:"Iron Red", clay:"Porcelain", method:"wheel-thrown", img:"☕" },
-  { id:"g6", name:"Pinch Pot", maker:"Mei L.", glaze:"Celadon", clay:"Earthenware", method:"hand-built", img:"🫙" },
-  { id:"g7", name:"Slab Plate", maker:"Jordan R.", glaze:"Rutile Blue", clay:"Stoneware", method:"hand-built", img:"🫓" },
-  { id:"g8", name:"Faceted Mug", maker:"Priya S.", glaze:"Shino", clay:"Stoneware", method:"wheel-thrown", img:"🧉" },
-];
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
@@ -693,9 +639,18 @@ const styles = `
 `;
 
 // ─── PieceForm component ───────────────────────────────────────
-function PieceForm({ label, typeLabel, typeColor }) {
-  const [photoFile, setPhotoFile] = useState(null); // eslint-disable-line no-unused-vars
+const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor }, ref) {
+  const [photoFile, setPhotoFile] = useState(null);
   const [photoUrl,  setPhotoUrl]  = useState(null);
+  const [name,        setName]        = useState("");
+  const [clayBody,    setClayBody]    = useState("");
+  const [method,      setMethod]      = useState("");
+  const [glaze,       setGlaze]       = useState("");
+  const [description, setDescription] = useState("");
+
+  useImperativeHandle(ref, () => ({
+    getValue: () => ({ photoFile, name, clayBody, method, glaze, description }),
+  }));
 
   return (
     <div className="piece-section">
@@ -705,8 +660,6 @@ function PieceForm({ label, typeLabel, typeColor }) {
           {typeLabel}
         </span>
       </div>
-      {/* CameraCapture replaces the dummy photo-upload div.
-          onCapture → upload file to Supabase Storage, store returned URL in form state. */}
       <CameraCapture
         label={`${label} Photo`}
         existingUrl={photoUrl}
@@ -715,16 +668,18 @@ function PieceForm({ label, typeLabel, typeColor }) {
       />
       <div className="form-field">
         <label className="form-label">Piece Name</label>
-        <input className="form-input" placeholder="e.g. Celadon Yunomi Cup" />
+        <input className="form-input" placeholder="e.g. Celadon Yunomi Cup"
+          value={name} onChange={e => setName(e.target.value)} />
       </div>
       <div className="form-row">
         <div className="form-field" style={{marginBottom:0}}>
           <label className="form-label">Clay Body</label>
-          <input className="form-input" placeholder="e.g. Stoneware" />
+          <input className="form-input" placeholder="e.g. Stoneware"
+            value={clayBody} onChange={e => setClayBody(e.target.value)} />
         </div>
         <div className="form-field" style={{marginBottom:0}}>
           <label className="form-label">Method</label>
-          <select className="form-input">
+          <select className="form-input" value={method} onChange={e => setMethod(e.target.value)}>
             <option value="">Select…</option>
             <option value="wheel-thrown">Wheel-thrown</option>
             <option value="hand-built">Hand-built</option>
@@ -733,108 +688,230 @@ function PieceForm({ label, typeLabel, typeColor }) {
       </div>
       <div className="form-field" style={{marginTop:10}}>
         <label className="form-label">Glaze / Technique</label>
-        <input className="form-input" placeholder="e.g. Soda-fired, cone 10" />
+        <input className="form-input" placeholder="e.g. Soda-fired, cone 10"
+          value={glaze} onChange={e => setGlaze(e.target.value)} />
       </div>
       <div className="form-field">
         <label className="form-label">Description</label>
-        <textarea className="form-input form-textarea" placeholder="Tell us about this piece…" />
+        <textarea className="form-input form-textarea" placeholder="Tell us about this piece…"
+          value={description} onChange={e => setDescription(e.target.value)} />
       </div>
     </div>
   );
-}
+});
 
 
 // ─── Main App ─────────────────────────────────────────────────
 export default function HotPotsApp() {
-  // Auth gate — real Supabase session
-  const [session, setSession] = useState(undefined); // undefined = loading, null = signed out
+  // ── Read URL params first (stable between renders, safe to read unconditionally) ──
+  const urlParams = (() => { try { return new URLSearchParams(window.location.search); } catch { return new URLSearchParams(""); } })();
+  const urlTab    = urlParams.get("tab");
+  const validTabs = ["home", "enter", "history", "messages", "profile", "admin"];
 
+  // ── ALL hooks before any early returns (Rules of Hooks) ──────
+  const [session,       setSession]       = useState(undefined); // undefined=loading, null=signed out
+  const [profile,       setProfile]       = useState(null);
+  const [round,         setRound]         = useState(null);
+  const [gallery,       setGallery]       = useState([]);
+  const [matches,       setMatches]       = useState([]);
+  const [tab,           setTab]           = useState(validTabs.includes(urlTab) ? urlTab : "home");
+  const [submitted,     setSubmitted]     = useState(false);
+  const [rankings,      setRankings]      = useState([]);
+  const [donateAmt,     setDonateAmt]     = useState("$3");
+  const [submitStep,    setSubmitStep]    = useState(1);
+  const [activeConvo,   setActiveConvo]   = useState(urlParams.get("convo") || null);
+  const [conversations, setConversations] = useState([]);
+  const [draft,         setDraft]         = useState("");
+  const [submitError,   setSubmitError]   = useState("");
+  const piece1Ref = useRef();
+  const piece2Ref = useRef();
+
+  // PWA — SW registration, install prompt, update detection, online status
+  const { canInstall, installApp, updateAvailable, applyUpdate, isOnline } = usePWA();
+
+  // ── Auth session listener ────────────────────────────────────
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session ?? null));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
     return () => subscription.unsubscribe();
   }, []);
 
-  // PWA — SW registration, install prompt, update detection, online status
-  const { canInstall, installApp, updateAvailable, applyUpdate, isOnline } = usePWA();
+  // ── Fetch profile when session changes ───────────────────────
+  useEffect(() => {
+    if (!session) { setProfile(null); return; }
+    supabase.from("profiles")
+      .select("id, display_name, role, bio, avatar_url, created_at")
+      .eq("id", session.user.id)
+      .single()
+      .then(({ data }) => { if (data) setProfile(data); });
+  }, [session]);
 
-  if (session === undefined) return null; // brief loading — avoid flash of auth screen
-  if (!session) {
-    return <AuthScreens onAuthComplete={() => {}} />;
-  }
+  // ── Fetch open round + gallery + matches when profile loads ──
+  useEffect(() => {
+    if (!profile) return;
+    // Open round
+    supabase.from("raffle_rounds")
+      .select("id, title, status, closes_at")
+      .eq("status", "open")
+      .order("closes_at", { ascending: true })
+      .limit(1)
+      .maybeSingle()
+      .then(async ({ data: r }) => {
+        if (!r) { setRound(null); return; }
+        // Count participants (submissions) for this round
+        const { count } = await supabase.from("submissions")
+          .select("id", { count: "exact", head: true })
+          .eq("round_id", r.id);
+        setRound({ ...r, participants: count ?? 0 });
 
-  // Read initial tab from URL param — enables deep links from push notifications
-  // and manifest shortcuts (e.g. /?tab=messages&convo=abc or /?tab=enter)
-  // Safe URL param reading — window.location may not be available in sandboxed previews
-  const urlParams = (() => { try { return new URLSearchParams(window.location.search); } catch { return new URLSearchParams(''); } })();
-  const urlTab = urlParams.get("tab");
-  const validTabs = ["home", "enter", "history", "messages", "profile", "admin"];
-  const initialTab = validTabs.includes(urlTab) ? urlTab : "home";
-  const initialConvo = urlParams.get("convo") || null;
+        // Gallery: other members' piece 2 for this round
+        const { data: subs } = await supabase.from("submissions")
+          .select("id, piece_2_name, piece_2_photo_url, piece_2_glaze, piece_2_clay_body, piece_2_method, profiles!user_id(display_name)")
+          .eq("round_id", r.id)
+          .neq("user_id", profile.id)
+          .not("piece_2_name", "is", null);
+        setGallery((subs ?? []).map(s => ({
+          id:     s.id,
+          name:   s.piece_2_name,
+          maker:  s.profiles?.display_name ?? "Member",
+          glaze:  s.piece_2_glaze ?? "",
+          clay:   s.piece_2_clay_body ?? "",
+          method: s.piece_2_method ?? "",
+          photoUrl: s.piece_2_photo_url,
+        })));
+      });
 
-  const [tab, setTab] = useState(initialTab);
-  const [submitted, setSubmitted] = useState(false);
-  const [rankings, setRankings] = useState([]); // ordered array of piece ids, index 0 = rank 1
-  const [donateAmt, setDonateAmt] = useState("$3");
-  const [submitStep, setSubmitStep] = useState(1); // 1=piece1, 2=piece2/gallery, 3=done
-  const [activeConvo, setActiveConvo] = useState(initialConvo);
+    // Match history
+    supabase.from("matches")
+      .select(`id, match_type, matched_at,
+        sub_a:submissions!submission_a(user_id, piece_1_name, piece_2_name, profiles!user_id(display_name)),
+        sub_b:submissions!submission_b(user_id, piece_1_name, piece_2_name, profiles!user_id(display_name)),
+        raffle_rounds!round_id(title)`)
+      .or(`submission_a.in.(select id from submissions where user_id='${profile.id}'),submission_b.in.(select id from submissions where user_id='${profile.id}')`)
+      .then(({ data }) => {
+        if (!data) return;
+        setMatches(data.map(m => {
+          const mine = m.sub_a?.user_id === profile.id ? m.sub_a : m.sub_b;
+          const theirs = m.sub_a?.user_id === profile.id ? m.sub_b : m.sub_a;
+          return {
+            id:           m.id,
+            round:        m.raffle_rounds?.title ?? "Past Round",
+            partner:      theirs?.profiles?.display_name ?? "Member",
+            myPiece:      m.match_type === "random" ? mine?.piece_1_name : mine?.piece_2_name,
+            partnerPiece: m.match_type === "random" ? theirs?.piece_1_name : theirs?.piece_2_name,
+            type:         m.match_type,
+          };
+        }));
+      });
+  }, [profile]);
 
   // ── Buy Me a Coffee widget ───────────────────────────────────
-  // Loads the floating BMC button once on mount.
-  // The widget ignores data-color if already initialised, so we
-  // remove any stale instance before re-injecting in dev hot-reload.
   useEffect(() => {
     const SCRIPT_ID = "bmc-widget-script";
-    if (document.getElementById(SCRIPT_ID)) return; // already loaded
-
+    if (document.getElementById(SCRIPT_ID)) return;
     const script = document.createElement("script");
-    script.id               = SCRIPT_ID;
-    script.src              = "https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js";
+    script.id = SCRIPT_ID;
+    script.src = "https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js";
     script.setAttribute("data-name",        "BMC-Widget");
     script.setAttribute("data-cfasync",     "false");
     script.setAttribute("data-id",          "wedged");
     script.setAttribute("data-description", "Support the app");
     script.setAttribute("data-message",     "");
-    script.setAttribute("data-color",       "#E8450A"); // matched to Hot—Pots ember orange
+    script.setAttribute("data-color",       "#E8450A");
     script.setAttribute("data-position",    "Right");
     script.setAttribute("data-x_margin",    "18");
     script.setAttribute("data-y_margin",    "18");
     script.async = true;
     document.body.appendChild(script);
-
     return () => {
-      // Cleanup on unmount (dev only) — remove script and widget DOM node
       document.getElementById(SCRIPT_ID)?.remove();
       document.getElementById("bmc-wbtn")?.remove();
     };
   }, []);
- // conversation id or null (list view)
-  const [conversations, setConversations] = useState(mockConversations);
-  const [draft, setDraft] = useState("");
 
-  const progress = (mockRound.participants / mockRound.spots) * 100;
+  // ── Early returns (after all hooks) ─────────────────────────
+  if (session === undefined) return null;
+  if (!session) return <AuthScreens onAuthComplete={() => {}} />;
+
+  // ── Derived values ───────────────────────────────────────────
+  const profileInitials = profile?.display_name
+    ? profile.display_name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)
+    : "?";
+  const progress = round ? Math.min(((round.participants ?? 0) / 20) * 100, 100) : 0;
 
   const daysLeft = (expiresAt) => {
     const diff = Math.ceil((new Date(expiresAt) - Date.now()) / (1000 * 60 * 60 * 24));
     return diff;
   };
 
-  const sendMessage = (convoId) => {
+  // ── Piece submission ─────────────────────────────────────────
+  const handleSubmitPieces = async () => {
+    setSubmitError("");
+    const p1 = piece1Ref.current?.getValue();
+    const p2 = piece2Ref.current?.getValue();
+    if (!round?.id || !profile?.id) return;
+
+    // Upload photos to Supabase Storage (bucket must be public in Supabase dashboard)
+    const uploadPhoto = async (file, prefix) => {
+      if (!file) return null;
+      const path = `${profile.id}/${prefix}_${Date.now()}`;
+      const { data, error } = await supabase.storage.from("pottery-photos").upload(path, file);
+      if (error || !data) return null;
+      return supabase.storage.from("pottery-photos").getPublicUrl(data.path).data.publicUrl;
+    };
+
+    const [p1Url, p2Url] = await Promise.all([
+      uploadPhoto(p1.photoFile, "p1"),
+      uploadPhoto(p2.photoFile, "p2"),
+    ]);
+
+    const { error } = await supabase.from("submissions").insert({
+      round_id:            round.id,
+      user_id:             profile.id,
+      piece_1_name:        p1.name,
+      piece_1_photo_url:   p1Url,
+      piece_1_clay_body:   p1.clayBody,
+      piece_1_method:      p1.method || null,
+      piece_1_glaze:       p1.glaze,
+      piece_1_description: p1.description,
+      piece_2_name:        p2.name,
+      piece_2_photo_url:   p2Url,
+      piece_2_clay_body:   p2.clayBody,
+      piece_2_method:      p2.method || null,
+      piece_2_glaze:       p2.glaze,
+      piece_2_description: p2.description,
+      piece_2_rankings:    rankings.map((id, idx) => ({ id, rank: idx + 1 })),
+    });
+
+    if (error) { setSubmitError(error.message); return; }
+    setSubmitted(true);
+  };
+
+  // ── Messaging ────────────────────────────────────────────────
+  const sendMessage = async (convoId) => {
     if (!draft.trim()) return;
+    const body = draft.trim();
+    setDraft("");
+    // Optimistic update
     setConversations(prev => prev.map(c => {
       if (c.id !== convoId) return c;
       return {
         ...c,
         messages: [...c.messages, {
-          id: "m" + Date.now(),
+          id:     "m" + Date.now(),
           sender: "me",
-          body: draft.trim(),
-          time: new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"}),
-          date: "Today"
-        }]
+          body,
+          time:   new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          date:   "Today",
+        }],
       };
     }));
-    setDraft("");
+    // Persist
+    await supabase.from("messages").insert({
+      conversation_id: convoId,
+      sender_id:       profile.id,
+      body,
+    });
   };
 
   const totalUnread = conversations.reduce((n, c) => {
@@ -902,7 +979,7 @@ export default function HotPotsApp() {
             <img src={LOGO} alt="Hot—Pots logo" />
             <span className="wordmark-text">Hot—<em>Pots</em></span>
           </div>
-          <div className="avatar">{mockUser.initials}</div>
+          <div className="avatar">{profileInitials}</div>
         </div>
 
         {/* TABS */}
@@ -913,7 +990,7 @@ export default function HotPotsApp() {
             { id:"history", label:"My Swaps"  },
             { id:"messages",label:"Messages"  },
             { id:"profile", label:"Profile"   },
-            ...(["admin","helper"].includes(mockUser.role) ? [{ id:"admin", label:"⚙️ Admin" }] : []),
+            ...(["admin","helper"].includes(profile?.role) ? [{ id:"admin", label:"⚙️ Admin" }] : []),
           ].map(t => (
             <button key={t.id} className={`tab ${tab===t.id?"active":""}`} onClick={()=>{ setTab(t.id); if(t.id!=="messages") setActiveConvo(null); }}>
               {t.label}
@@ -929,12 +1006,12 @@ export default function HotPotsApp() {
             <>
               <div className="round-banner">
                 <div className="round-status">● Open Now</div>
-                <div className="round-title">{mockRound.title}</div>
-                <div className="round-meta">Closes {mockRound.closes}</div>
+                <div className="round-title">{round?.title ?? "Loading…"}</div>
+                <div className="round-meta">Closes {round ? new Date(round.closes_at).toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : "…"}</div>
                 <div className="round-progress">
                   <div className="round-progress-fill" style={{width:`${progress}%`}} />
                 </div>
-                <div className="round-progress-label">{mockRound.participants} of {mockRound.spots} spots filled</div>
+                <div className="round-progress-label">{round?.participants ?? 0} participants so far</div>
                 <button className="btn-primary" onClick={()=>setTab("enter")}>Enter This Round →</button>
               </div>
 
@@ -963,9 +1040,11 @@ export default function HotPotsApp() {
                 <span className="section-link">See all</span>
               </div>
               <div className="gallery-grid">
-                {mockGallery.slice(0,4).map(p=>(
+                {gallery.slice(0,4).map(p=>(
                   <div className="gallery-card" key={p.id}>
-                    <span className="gallery-emoji">{p.img}</span>
+                    {p.photoUrl
+                      ? <img src={p.photoUrl} alt={p.name} style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:6}} />
+                      : <span className="gallery-emoji">🏺</span>}
                     <div className="gallery-name">{p.name}</div>
                     <div className="gallery-maker">{p.maker}</div>
                     <div className="gallery-tags">
@@ -998,7 +1077,7 @@ export default function HotPotsApp() {
                   <div style={{fontSize:60, marginBottom:18}}>🎉</div>
                   <div style={{fontFamily:"'Playfair Display',serif", fontSize:22, marginBottom:10}}>You're in!</div>
                   <div style={{fontSize:14, color:"#92400E", lineHeight:1.6, marginBottom:28}}>
-                    Both pieces submitted for <strong>{mockRound.title}</strong>. Your random raffle match will be drawn on {mockRound.closes}. Your ranked choice match will be optimised across the whole studio.
+                    Both pieces submitted for <strong>{round?.title}</strong>. Your random raffle match will be drawn on {round ? new Date(round.closes_at).toLocaleDateString("en-US",{month:"long",day:"numeric"}) : "…"}. Your ranked choice match will be optimised across the whole studio.
                   </div>
                   <button className="btn-secondary" onClick={()=>{setSubmitted(false);setSubmitStep(1);setTab("home");}}>Back to Home</button>
                 </div>
@@ -1008,7 +1087,7 @@ export default function HotPotsApp() {
                     <div className="form-intro-title">Step 1 of 2 — Random Raffle Piece</div>
                     <div className="form-intro-text">This piece will be randomly matched with another member. You won't know who you'll get — that's part of the fun!</div>
                   </div>
-                  <PieceForm label="Piece 1" typeLabel="Random Raffle" typeColor="#E8450A" />
+                  <PieceForm ref={piece1Ref} label="Piece 1" typeLabel="Random Raffle" typeColor="#E8450A" />
                   <button className="btn-primary" onClick={()=>setSubmitStep(2)}>Continue to Piece 2 →</button>
                 </>
               ) : (
@@ -1017,7 +1096,7 @@ export default function HotPotsApp() {
                     <div className="form-intro-title">Step 2 of 2 — Choice Piece</div>
                     <div className="form-intro-text">Submit your second piece, then rank the pieces you'd love to receive. The algorithm maximises matches using everyone's rank order — the more you rank, the better your odds!</div>
                   </div>
-                  <PieceForm label="Piece 2" typeLabel="Choice Match" typeColor="#D97706" />
+                  <PieceForm ref={piece2Ref} label="Piece 2" typeLabel="Choice Match" typeColor="#D97706" />
 
                   <div className="gallery-intro">
                     <div className="gallery-intro-title">🏆 Rank the Pieces You Want</div>
@@ -1035,7 +1114,7 @@ export default function HotPotsApp() {
                       </div>
                       <div className="rank-list">
                         {rankings.map((id, idx) => {
-                          const p = mockGallery.find(g=>g.id===id);
+                          const p = gallery.find(g=>g.id===id);
                           if (!p) return null;
                           return (
                             <div className="rank-row" key={id}>
@@ -1061,15 +1140,17 @@ export default function HotPotsApp() {
                   )}
 
                   {/* Unranked pool */}
-                  {mockGallery.filter(p=>!rankings.includes(p.id)).length > 0 && (
+                  {gallery.filter(p=>!rankings.includes(p.id)).length > 0 && (
                     <>
                       <div style={{fontSize:12, color:"#92400E", marginBottom:10, fontWeight:500}}>
                         {rankings.length > 0 ? "Add more pieces to your ranking:" : "Tap a piece to add it to your ranking:"}
                       </div>
                       <div className="gallery-grid" style={{marginBottom:20}}>
-                        {mockGallery.filter(p=>!rankings.includes(p.id)).map(p=>(
+                        {gallery.filter(p=>!rankings.includes(p.id)).map(p=>(
                           <div className="gallery-card" key={p.id}>
-                            <span className="gallery-emoji">{p.img}</span>
+                            {p.photoUrl
+                              ? <img src={p.photoUrl} alt={p.name} style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:6}} />
+                              : <span className="gallery-emoji">🏺</span>}
                             <div className="gallery-name">{p.name}</div>
                             <div className="gallery-maker">{p.maker}</div>
                             <div className="gallery-tags">
@@ -1085,10 +1166,11 @@ export default function HotPotsApp() {
                     </>
                   )}
 
+                  {submitError && <div style={{color:"#C1440E",fontSize:12,marginBottom:8}}>⚠ {submitError}</div>}
                   <button className="btn-primary"
                     disabled={rankings.length===0}
                     style={{opacity: rankings.length===0 ? 0.5 : 1, cursor: rankings.length===0?"not-allowed":"pointer"}}
-                    onClick={()=>{ if(rankings.length>0) setSubmitted(true); }}>
+                    onClick={handleSubmitPieces}>
                     Submit Both Pieces 🏺
                   </button>
                   {rankings.length===0 && (
@@ -1107,9 +1189,10 @@ export default function HotPotsApp() {
             <>
               <div className="section-header" style={{marginTop:20}}>
                 <div className="section-title">Past Swaps</div>
-                <span className="section-link">{mockMatches.length} completed</span>
+                <span className="section-link">{matches.length} completed</span>
               </div>
-              {mockMatches.map(m=>(
+              {matches.length === 0 && <div style={{textAlign:"center",color:"#92400E",fontSize:13,padding:"32px 0"}}>No swaps yet — enter a round to get started!</div>}
+              {matches.map(m=>(
                 <div className="match-card" key={m.id}>
                   <div className="match-emoji">🤝</div>
                   <div className="match-info">
@@ -1259,9 +1342,9 @@ export default function HotPotsApp() {
           {tab==="profile" && (
             <>
               <div className="profile-header">
-                <div className="profile-avatar">{mockUser.initials}</div>
-                <div className="profile-name">{mockUser.name}</div>
-                <div style={{fontSize:13, color:"#92400E"}}>Studio Member since 2024</div>
+                <div className="profile-avatar">{profileInitials}</div>
+                <div className="profile-name">{profile?.display_name ?? "…"}</div>
+                <div style={{fontSize:13, color:"#92400E"}}>Studio Member since {profile ? new Date(profile.created_at).getFullYear() : "…"}</div>
                 <div className="profile-stats">
                   <div className="stat"><div className="stat-num">8</div><div className="stat-label">Swaps</div></div>
                   <div className="stat"><div className="stat-num">5</div><div className="stat-label">Rounds</div></div>
@@ -1283,8 +1366,8 @@ export default function HotPotsApp() {
 
 
           {/* ── ADMIN ── */}
-          {tab==="admin" && ["admin","helper"].includes(mockUser.role) && (
-            <AdminPortal role={mockUser.role} />
+          {tab==="admin" && ["admin","helper"].includes(profile?.role) && (
+            <AdminPortal role={profile.role} />
           )}
 
         {/* BOTTOM NAV */}
@@ -1295,7 +1378,7 @@ export default function HotPotsApp() {
             {id:"history", icon:"🤝", label:"Swaps"},
             {id:"messages",icon:"💬", label:"Messages"},
             {id:"profile", icon:"👤", label:"Profile"},
-            ...(["admin","helper"].includes(mockUser.role) ? [{id:"admin", icon:"⚙️", label:"Admin"}] : []),
+            ...(["admin","helper"].includes(profile?.role) ? [{id:"admin", icon:"⚙️", label:"Admin"}] : []),
           ].map(n=>(
             <button key={n.id} className={`nav-btn ${tab===n.id?"active":""}`} onClick={()=>{ setTab(n.id); if(n.id!=="messages") setActiveConvo(null); }}>
               <span className="nav-icon">{n.icon}</span>
