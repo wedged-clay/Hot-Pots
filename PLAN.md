@@ -19,15 +19,15 @@ All screens are built and interactive with mock data. A developer can open any f
 
 | File | What it contains | Status |
 |---|---|---|
-| `pottery-swap.jsx` | Main app — all 5 member tabs | ✅ Complete (mock data) |
-| `auth-screens.jsx` | Splash, sign in, sign up, magic link, forgot password, onboarding (2 steps) | ✅ Complete (fake auth) |
-| `CameraCapture.jsx` | Live camera viewfinder, photo review, compression, file upload fallback | ✅ Complete (ready to wire) |
-| `AdminPortal.jsx` | Round management, match oversight, stats, member management | ✅ Complete (mock data) |
-| `service-worker.js` | Cache strategies, push notification handler, background sync | ✅ Complete |
-| `manifest.json` | PWA manifest — name, icons, shortcuts, theme colour | ✅ Complete |
-| `usePWA.js` | Install prompt, update detection, push subscription hook | ✅ Complete |
-| `push-notify.ts` | Supabase Edge Function — all 5 notification types | ✅ Complete |
-| `admin-roles.sql` | Role system (member/helper/admin), all RLS policies, stats view | ✅ Complete |
+| `src/App.jsx` | Main app — all 5 member tabs | ✅ Complete (mock data) |
+| `src/components/auth-screens.jsx` | Splash, sign in, sign up, magic link, forgot password, onboarding (2 steps) | ✅ Complete (fake auth) |
+| `src/components/CameraCapture.jsx` | Live camera viewfinder, photo review, compression, file upload fallback | ✅ Complete (ready to wire) |
+| `src/components/AdminPortal.jsx` | Round management, match oversight, stats, member management | ✅ Complete (mock data) |
+| `public/service-worker.js` | Cache strategies, push notification handler, background sync | ✅ Complete |
+| `public/manifest.json` | PWA manifest — name, icons, shortcuts, theme colour | ✅ Complete |
+| `src/hooks/usePWA.js` | Install prompt, update detection, push subscription hook | ✅ Complete |
+| `supabase/functions/push-notify/index.ts` | Supabase Edge Function — all 5 notification types | ✅ Complete |
+| `supabase/migrations/001_admin_roles.sql` | Role system (member/helper/admin), all RLS policies, stats view | ✅ Complete |
 | `README.md` | Project overview, setup instructions, role/mechanics docs | ✅ Complete |
 | `.gitignore` | Node, Vite, Supabase, OS, editor ignores | ✅ Complete |
 | `.env.example` | All required environment variables with instructions | ✅ Complete |
@@ -35,7 +35,7 @@ All screens are built and interactive with mock data. A developer can open any f
 
 ### What "Complete (mock data)" means
 
-The UI prototype uses hardcoded mock objects at the top of `pottery-swap.jsx` — `mockUser`, `mockRound`, `mockMatches`, `mockConversations`, `mockGallery`. Auth flows use a `fakeLoad()` timeout instead of real Supabase calls. Nothing is persisted. This is intentional — it lets you review and approve the full UX before any backend work begins.
+The UI prototype uses hardcoded mock objects at the top of `src/App.jsx` — `mockUser`, `mockRound`, `mockMatches`, `mockConversations`, `mockGallery`. Auth flows use a `fakeLoad()` timeout instead of real Supabase calls. Nothing is persisted. This is intentional — it lets you review and approve the full UX before any backend work begins.
 
 ---
 
@@ -132,7 +132,7 @@ Everything below is backend integration and project scaffolding. The UI for all 
 
 ## Data Model
 
-Full schema with comments is in `pottery-swap.jsx` lines 1–90. Summary:
+Full schema with comments is in `src/App.jsx` lines 1–90. Summary:
 
 ```
 profiles          — user accounts, display name, avatar, role

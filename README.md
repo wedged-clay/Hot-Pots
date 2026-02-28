@@ -39,8 +39,10 @@ hotpots/
 │   └── icons/                 # App icons (see PWA-SETUP.md for generation)
 │
 ├── src/
-│   ├── App.jsx                # Main app (pottery-swap.jsx → rename this)
+│   ├── App.jsx                # Main app — all 5 member tabs
+│   ├── main.jsx               # React entry point
 │   ├── components/
+│   │   ├── auth-screens.jsx   # Auth flow UI (splash, sign in, sign up, onboarding)
 │   │   ├── CameraCapture.jsx  # Camera + photo upload component
 │   │   └── AdminPortal.jsx    # Admin portal (rounds, matches, stats, members)
 │   └── hooks/
@@ -53,7 +55,9 @@ hotpots/
 │   └── migrations/
 │       └── 001_admin_roles.sql # Role system + RLS policies
 │
-├── auth-screens.jsx           # Auth flow UI (splash, sign in, sign up, onboarding)
+├── index.html                 # Vite entry point (includes PWA meta tags)
+├── vite.config.js
+├── package.json
 ├── .env.example               # Environment variable template (copy to .env)
 ├── .gitignore
 ├── PWA-SETUP.md               # Step-by-step guide for PWA setup and deployment

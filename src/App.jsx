@@ -1,4 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import CameraCapture from "./components/CameraCapture";
+import AdminPortal from "./components/AdminPortal";
+import AuthScreens from "./components/auth-screens";
+import { usePWA } from "./hooks/usePWA";
 
 // ============================================================
 // DATA MODEL (Supabase / Postgres Schema) — Updated
@@ -687,43 +691,6 @@ const styles = `
   .nav-btn.active .nav-label { color: #E8450A; font-weight: 700; }
 `;
 
-// ─── CameraCapture (stub for preview — full component in CameraCapture.jsx) ──
-// In production: import CameraCapture from "./components/CameraCapture"
-function CameraCapture({ label = "Photo", onCapture, onClear, existingUrl }) {
-  const [photoUrl, setPhotoUrl] = useState(existingUrl || null);
-  const fileInputRef = useRef(null);
-
-  const handleFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    setPhotoUrl(url);
-    onCapture?.(file, url);
-    e.target.value = "";
-  };
-
-  if (photoUrl) return (
-    <div style={{position:"relative",width:"100%",height:150,borderRadius:14,overflow:"hidden",border:"2px solid #E8450A44",marginBottom:14}}>
-      <img src={photoUrl} alt={label} style={{width:"100%",height:"100%",objectFit:"cover"}} />
-      <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(to top,rgba(0,0,0,.65),transparent)",padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <span style={{color:"white",fontSize:12,fontWeight:500}}>📷 {label}</span>
-        <button onClick={()=>{setPhotoUrl(null);onClear?.();}} style={{background:"rgba(255,255,255,.2)",color:"white",border:"none",borderRadius:8,padding:"3px 10px",fontSize:11,cursor:"pointer"}}>Retake</button>
-      </div>
-    </div>
-  );
-
-  return (
-    <div style={{marginBottom:14}}>
-      <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFile} style={{display:"none"}} />
-      <div onClick={()=>fileInputRef.current?.click()} style={{width:"100%",height:150,border:"2px dashed #D9770660",borderRadius:14,background:"#FEF3C7",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8,cursor:"pointer",marginBottom:6}}>
-        <span style={{fontSize:28}}>📷</span>
-        <span style={{fontSize:13,fontWeight:600,color:"#44200A"}}>Add {label}</span>
-        <span style={{fontSize:11,color:"#92400E"}}>Tap to take photo or upload</span>
-      </div>
-    </div>
-  );
-}
-
 // ─── PieceForm component ───────────────────────────────────────
 function PieceForm({ label, typeLabel, typeColor }) {
   const [photoFile, setPhotoFile] = useState(null); // eslint-disable-line no-unused-vars
@@ -775,161 +742,19 @@ function PieceForm({ label, typeLabel, typeColor }) {
   );
 }
 
-// ============================================================
-// AdminPortal.jsx — Hot—Pots Admin Portal
-// src/components/AdminPortal.jsx
-//
-// A hidden tab rendered only when currentUser.role === 'admin'
-// or currentUser.role === 'helper'.
-//
-// Helpers can: view stats, view matches, view members
-// Admins can:  everything + open/close rounds, trigger matching,
-//              manually pair, change member roles, suspend members
-//
-// INTEGRATION — in pottery-swap.jsx HotPotsApp():
-//   1. Import this component
-//   2. Add role to mockUser: { name, initials, role: "admin" }
-//   3. Add admin tab conditionally (see bottom of this file)
-//   4. Render <AdminPortal role={mockUser.role} /> when tab === "admin"
-// ============================================================
-
-
-// ─── AdminPortal (stub for preview — full component in AdminPortal.jsx) ──
-// In production: import AdminPortal from "./components/AdminPortal"
-function AdminPortal({ role = "admin" }) {
-  const [section, setSection] = useState("rounds");
-  const isAdmin = role === "admin";
-  const C = { ember:"#E8450A", bark:"#44200A", parchment:"#FDF0E0", ochre:"#D97706" };
-
-  const sections = [
-    { id:"rounds",  label:"🔥 Rounds",  content: () => (
-      <div>
-        <div style={{background:"white",borderRadius:14,border:"1px solid #D9770628",padding:"14px 16px",marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:C.bark}}>Spring Equinox Swap</div>
-            <span style={{background:"#dcfce7",color:"#16a34a",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>open</span>
-          </div>
-          <div style={{fontSize:11,color:"#92400E",marginBottom:12}}>Mar 1 → Mar 22 · 18 participants</div>
-          {isAdmin && <div style={{display:"flex",gap:8}}>
-            <button style={{flex:1,padding:"9px",borderRadius:10,border:"none",background:"linear-gradient(135deg,#E8450A,#D4380D)",color:"white",fontSize:12,fontWeight:600,cursor:"pointer"}}>🎲 Run Matching</button>
-            <button style={{padding:"9px 14px",borderRadius:10,border:"1.5px solid #E8450A60",background:"white",color:"#E8450A",fontSize:12,fontWeight:600,cursor:"pointer"}}>Close</button>
-          </div>}
-        </div>
-        <div style={{background:"white",borderRadius:14,border:"1px solid #D9770628",padding:"14px 16px",marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:C.bark}}>Winter Warmth Round</div>
-            <span style={{background:"#e0e7ff",color:"#4338ca",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600}}>complete</span>
-          </div>
-          <div style={{fontSize:11,color:"#92400E"}}>Jan 5 → Jan 26 · 24 participants · 22/24 matched</div>
-        </div>
-        {isAdmin && <button style={{width:"100%",padding:"12px",borderRadius:12,border:"none",background:"linear-gradient(135deg,#E8450A,#D4380D)",color:"white",fontSize:14,fontWeight:600,cursor:"pointer",marginTop:4}}>+ Open New Round</button>}
-      </div>
-    )},
-    { id:"matches", label:"🎲 Matches", content: () => (
-      <div>
-        <div style={{background:"#fff1f2",border:"1.5px solid #fca5a5",borderRadius:12,padding:"12px 14px",marginBottom:14}}>
-          <div style={{fontWeight:600,fontSize:13,color:"#dc2626",marginBottom:4}}>⚠️ 2 unmatched submissions</div>
-          <div style={{fontSize:12,color:"#92400E"}}>These members entered but weren't matched. Manually pair or resolve.</div>
-        </div>
-        {[{a:"Priya Nair",pa:"Celadon Yunomi",b:"Tom Whitfield",pb:"Ash Glaze Bowl",type:"random",status:"matched"},
-          {a:"Sara Lindqvist",pa:"Raku Vase",b:"Maya Chen",pb:"Terracotta Planter",type:"choice",status:"matched"},
-          {a:"James Okafor",pa:"Soda-fired Cup",b:"Dev Patel",pb:"—",type:"random",status:"unmatched"}
-        ].map((m,i)=>(
-          <div key={i} style={{background:"white",borderRadius:12,border:"1px solid #D9770628",padding:"12px 14px",marginBottom:8}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-              <span style={{background:m.type==="random"?"#E8450A18":"#D9770622",color:m.type==="random"?"#E8450A":"#D97706",padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:700}}>{m.type==="random"?"🎲 Random":"🏆 Choice"}</span>
-              <span style={{background:m.status==="matched"?"#dcfce7":"#fee2e2",color:m.status==="matched"?"#16a34a":"#dc2626",padding:"2px 8px",borderRadius:10,fontSize:10,fontWeight:600}}>{m.status}</span>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:"#44200A"}}>{m.a}</div><div style={{fontSize:11,color:"#92400E"}}>{m.pa}</div></div>
-              <span style={{color:"#D9770680",fontSize:16}}>⇄</span>
-              <div style={{flex:1,textAlign:"right"}}><div style={{fontSize:12,fontWeight:600,color:"#44200A"}}>{m.b}</div><div style={{fontSize:11,color:"#92400E"}}>{m.pb}</div></div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )},
-    { id:"stats", label:"📊 Stats", content: () => (
-      <div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-          {[["34","Members"],["94%","Match Rate"],["6","Rounds"],["76%","Avg Participation"],["412","Messages"],["28","Active (30d)"]].map(([v,l])=>(
-            <div key={l} style={{background:"white",borderRadius:12,border:"1px solid #D9770628",padding:"14px 12px",textAlign:"center"}}>
-              <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,fontWeight:700,color:"#E8450A",lineHeight:1,marginBottom:4}}>{v}</div>
-              <div style={{fontSize:11,color:"#92400E"}}>{l}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{background:"white",borderRadius:14,border:"1px solid #D9770628",padding:"16px"}}>
-          <div style={{fontSize:13,fontWeight:600,color:"#44200A",marginBottom:14}}>Member Growth</div>
-          {[["Aug",8],["Sep",12],["Oct",14],["Nov",18],["Dec",22],["Jan",28],["Feb",34]].map(([m,v])=>(
-            <div key={m} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-              <div style={{fontSize:11,color:"#92400E",width:32,textAlign:"right"}}>{m}</div>
-              <div style={{flex:1,height:10,background:"#FEF3C7",borderRadius:5,overflow:"hidden"}}>
-                <div style={{width:`${v/34*100}%`,height:"100%",borderRadius:5,background:"linear-gradient(90deg,#E8450A,#D97706)"}} />
-              </div>
-              <div style={{fontSize:11,color:"#92400E",width:28}}>{v}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )},
-    { id:"members", label:"👥 Members", content: () => (
-      <div>
-        <div style={{background:"#FEF3C7",border:"1.5px dashed #D9770680",borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-          <div><div style={{fontSize:10,fontWeight:600,color:"#92400E",marginBottom:2}}>STUDIO INVITE CODE</div><div style={{fontFamily:"monospace",fontSize:22,fontWeight:700,color:"#44200A",letterSpacing:4}}>KILN42</div></div>
-          {isAdmin && <button style={{padding:"6px 12px",borderRadius:10,border:"1.5px solid #E8450A60",background:"white",color:"#E8450A",fontSize:12,fontWeight:600,cursor:"pointer"}}>Regenerate</button>}
-        </div>
-        {[{n:"Maya Chen",i:"MC",r:"admin",s:"active",sw:3},
-          {n:"James Okafor",i:"JO",r:"helper",s:"active",sw:2},
-          {n:"Priya Nair",i:"PN",r:"member",s:"active",sw:4},
-          {n:"Dev Patel",i:"DP",r:"member",s:"pending",sw:0},
-          {n:"Chloe Morrow",i:"CM",r:"member",s:"suspended",sw:0}
-        ].map((m,i)=>(
-          <div key={i} style={{background:"white",borderRadius:12,border:"1px solid #D9770628",padding:"12px 14px",marginBottom:8,display:"flex",alignItems:"center",gap:12}}>
-            <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#E8450A,#7C2D12)",color:"white",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{m.i}</div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:600,color:"#44200A"}}>{m.n}</div>
-              <div style={{display:"flex",gap:5,marginTop:3,flexWrap:"wrap"}}>
-                <span style={{padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:700,background:m.r==="admin"?"#E8450A22":m.r==="helper"?"#D9770622":"#D9770618",color:m.r==="admin"?"#E8450A":m.r==="helper"?"#D97706":"#92400E"}}>{m.r}</span>
-                <span style={{padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600,background:m.s==="active"?"#dcfce7":m.s==="pending"?"#FEF3C7":"#fee2e2",color:m.s==="active"?"#16a34a":m.s==="pending"?"#D97706":"#dc2626"}}>{m.s}</span>
-                <span style={{fontSize:10,color:"#92400E"}}>{m.sw} swaps</span>
-              </div>
-            </div>
-            {isAdmin && m.s==="pending" && <button style={{padding:"5px 10px",borderRadius:8,border:"none",background:"#dcfce7",color:"#16a34a",fontSize:11,fontWeight:600,cursor:"pointer"}}>Approve</button>}
-            {isAdmin && m.s==="active" && m.r!=="admin" && <button style={{padding:"5px 10px",borderRadius:8,border:"none",background:"#fee2e2",color:"#dc2626",fontSize:11,fontWeight:600,cursor:"pointer"}}>Suspend</button>}
-          </div>
-        ))}
-      </div>
-    )},
-  ];
-
-  const active = sections.find(s=>s.id===section);
-
-  return (
-    <div style={{paddingBottom:80}}>
-      <div style={{padding:"16px 16px 0",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-        <div>
-          <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:C.bark}}>Admin</div>
-          <div style={{fontSize:11,color:"#92400E"}}>Signed in as <strong>{role}</strong></div>
-        </div>
-        <span style={{padding:"3px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:isAdmin?"#E8450A22":"#D9770622",color:isAdmin?"#E8450A":"#D97706"}}>{role}</span>
-      </div>
-      <div style={{display:"flex",gap:6,padding:"0 16px 14px",overflowX:"auto",scrollbarWidth:"none"}}>
-        {sections.map(s=>(
-          <button key={s.id} onClick={()=>setSection(s.id)} style={{flexShrink:0,padding:"7px 14px",borderRadius:20,border:"1.5px solid",borderColor:section===s.id?"#E8450A":"#D9770640",background:section===s.id?"#E8450A":"white",color:section===s.id?"white":"#92400E",fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:section===s.id?600:500,cursor:"pointer",whiteSpace:"nowrap"}}>
-            {s.label}
-          </button>
-        ))}
-      </div>
-      <div style={{padding:"0 16px"}}>
-        {active?.content()}
-      </div>
-    </div>
-  );
-}
 
 // ─── Main App ─────────────────────────────────────────────────
 export default function HotPotsApp() {
+  // Auth gate — replaced by real Supabase session check in Phase 2
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // PWA — SW registration, install prompt, update detection, online status
+  const { canInstall, installApp, updateAvailable, applyUpdate, isOnline } = usePWA();
+
+  if (!isAuthenticated) {
+    return <AuthScreens onAuthComplete={() => setIsAuthenticated(true)} />;
+  }
+
   // Read initial tab from URL param — enables deep links from push notifications
   // and manifest shortcuts (e.g. /?tab=messages&convo=abc or /?tab=enter)
   // Safe URL param reading — window.location may not be available in sandboxed previews
@@ -1014,6 +839,54 @@ export default function HotPotsApp() {
     <>
       <style>{styles}</style>
       <div className="app">
+
+        {/* ── Offline banner ── */}
+        {!isOnline && (
+          <div style={{
+            background: C.mahogany, color: "white",
+            padding: "8px 16px", textAlign: "center",
+            fontSize: 13, position: "sticky", top: 0, zIndex: 9999,
+          }}>
+            📡 You're offline — some features may be unavailable
+          </div>
+        )}
+
+        {/* ── Update available banner ── */}
+        {updateAvailable && (
+          <div style={{
+            background: C.ember, color: "white",
+            padding: "10px 16px", fontSize: 13,
+            position: "sticky", top: 0, zIndex: 9999,
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
+          }}>
+            🏺 A new version of Hot—Pots is ready!
+            <button onClick={applyUpdate} style={{
+              background: "white", color: C.ember,
+              border: "none", borderRadius: 8,
+              padding: "4px 12px", fontWeight: 600, cursor: "pointer",
+            }}>
+              Update now
+            </button>
+          </div>
+        )}
+
+        {/* ── Install prompt banner ── */}
+        {canInstall && (
+          <div style={{
+            background: C.sand, borderBottom: `1px solid ${C.ochre}44`,
+            padding: "10px 16px", fontSize: 13,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <span style={{ color: C.bark }}>📲 Add Hot—Pots to your home screen</span>
+            <button onClick={installApp} style={{
+              background: C.ember, color: "white",
+              border: "none", borderRadius: 8,
+              padding: "5px 14px", fontWeight: 600, cursor: "pointer", fontSize: 12,
+            }}>
+              Install
+            </button>
+          </div>
+        )}
 
         {/* HEADER */}
         <div className="header">

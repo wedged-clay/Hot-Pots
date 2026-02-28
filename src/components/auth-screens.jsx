@@ -327,7 +327,7 @@ function pwdStrength(pwd) {
 }
 
 // ── Main auth demo component ──────────────────────────────────
-export default function AuthScreens() {
+export default function AuthScreens({ onAuthComplete }) {
   const [screen, setScreen] = useState("splash"); // splash | signin | signup | magic | checkemail | forgot | newpwd | onboard1 | onboard2
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -754,11 +754,11 @@ export default function AuthScreens() {
             </div>
 
             <button className="auth-btn"
-              onClick={()=>fakeLoad(()=>alert("🎉 You're in! This would navigate to the main app."))}>
+              onClick={()=>fakeLoad(()=>onAuthComplete?.())}>
               {loading ? "Verifying…" : "Join the Studio 🏺"}
             </button>
 
-            <button className="auth-btn-ghost" onClick={()=>fakeLoad(()=>alert("Skipped — you can add a code later in your profile."))}>
+            <button className="auth-btn-ghost" onClick={()=>fakeLoad(()=>onAuthComplete?.())}>
               Skip for now
             </button>
           </div>
