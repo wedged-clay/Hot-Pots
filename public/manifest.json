@@ -1,0 +1,95 @@
+{
+  "name": "Hot—Pots",
+  "short_name": "Hot—Pots",
+  "description": "The pottery swap community for your studio. Give a piece, get a piece.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FDF0E0",
+  "theme_color": "#E8450A",
+  "categories": ["lifestyle", "social"],
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/icons/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/home.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Hot—Pots Home Screen"
+    },
+    {
+      "src": "/screenshots/enter.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Enter a Raffle Round"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Enter Raffle",
+      "short_name": "Enter",
+      "description": "Submit pieces for the current round",
+      "url": "/?tab=enter",
+      "icons": [{ "src": "/icons/shortcut-enter.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "My Messages",
+      "short_name": "Messages",
+      "description": "Message your swap partners",
+      "url": "/?tab=messages",
+      "icons": [{ "src": "/icons/shortcut-messages.png", "sizes": "96x96" }]
+    }
+  ]
+}
