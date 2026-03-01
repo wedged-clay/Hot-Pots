@@ -60,36 +60,18 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [
-    {
-      "src": "/screenshots/home.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Hot—Pots Home Screen"
-    },
-    {
-      "src": "/screenshots/enter.png",
-      "sizes": "390x844",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Enter a Raffle Round"
-    }
-  ],
   "shortcuts": [
     {
       "name": "Enter Raffle",
       "short_name": "Enter",
       "description": "Submit pieces for the current round",
-      "url": "/?tab=enter",
-      "icons": [{ "src": "/icons/shortcut-enter.png", "sizes": "96x96" }]
+      "url": "/?tab=enter"
     },
     {
       "name": "My Messages",
       "short_name": "Messages",
       "description": "Message your swap partners",
-      "url": "/?tab=messages",
-      "icons": [{ "src": "/icons/shortcut-messages.png", "sizes": "96x96" }]
+      "url": "/?tab=messages"
     }
   ]
 }

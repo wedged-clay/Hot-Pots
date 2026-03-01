@@ -638,6 +638,22 @@ const styles = `
   .nav-btn.active .nav-label { color: #E8450A; font-weight: 700; }
 `;
 
+// ─── Helpers ──────────────────────────────────────────────────
+function formatMsgDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function toInitials(name) {
+  return (name ?? "?").split(" ").filter(Boolean).map(w => w[0]).join("").toUpperCase().slice(0, 2) || "?";
+}
+
 // ─── PieceForm component ───────────────────────────────────────
 const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor }, ref) {
   const [photoFile, setPhotoFile] = useState(null);
@@ -725,6 +741,7 @@ export default function HotPotsApp() {
   const [submitError,   setSubmitError]   = useState("");
   const piece1Ref = useRef();
   const piece2Ref = useRef();
+  const activeConvoRef = useRef(null); // mirrors activeConvo for Realtime closure
 
   // PWA — SW registration, install prompt, update detection, online status
   const { canInstall, installApp, updateAvailable, applyUpdate, isOnline } = usePWA();
@@ -803,6 +820,88 @@ export default function HotPotsApp() {
           };
         }));
       });
+  }, [profile]);
+
+  // ── Fetch conversations when profile loads ───────────────────
+  useEffect(() => {
+    if (!profile) { setConversations([]); return; }
+    supabase
+      .from("conversations")
+      .select(`
+        id, expires_at,
+        match:matches!match_id(
+          id, match_type,
+          sub_a:submissions!submission_a(user_id, piece_1_name, profiles!user_id(id, display_name)),
+          sub_b:submissions!submission_b(user_id, piece_1_name, profiles!user_id(id, display_name)),
+          round:raffle_rounds!round_id(title)
+        ),
+        messages(id, sender_id, body, sent_at)
+      `)
+      .then(({ data }) => {
+        if (!data) return;
+        setConversations(data.map(c => {
+          const match = c.match;
+          const isA = match?.sub_a?.user_id === profile.id;
+          const mySub    = isA ? match.sub_a : match.sub_b;
+          const theirSub = isA ? match.sub_b : match.sub_a;
+          const partner  = theirSub?.profiles;
+          const msgs = [...(c.messages ?? [])]
+            .sort((a, b) => new Date(a.sent_at) - new Date(b.sent_at))
+            .map(m => ({
+              id:     m.id,
+              sender: m.sender_id === profile.id ? "me" : "them",
+              body:   m.body,
+              time:   new Date(m.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              date:   formatMsgDate(m.sent_at),
+            }));
+          return {
+            id:         c.id,
+            partner:    { id: partner?.id ?? null, name: partner?.display_name ?? "Partner", initials: toInitials(partner?.display_name) },
+            round:      match?.round?.title ?? "",
+            myPiece:    mySub?.piece_1_name ?? "",
+            theirPiece: theirSub?.piece_1_name ?? "",
+            matchType:  match?.match_type ?? "random",
+            expiresAt:  c.expires_at,
+            messages:   msgs,
+            unreadCount: 0,
+          };
+        }));
+      });
+  }, [profile]);
+
+  // ── Keep activeConvoRef in sync (for Realtime closure) ───────
+  useEffect(() => { activeConvoRef.current = activeConvo; }, [activeConvo]);
+
+  // ── Realtime: subscribe to incoming messages ─────────────────
+  // Requires Realtime enabled on the messages table in Supabase dashboard
+  useEffect(() => {
+    if (!profile) return;
+    const channel = supabase
+      .channel(`messages:${profile.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages" },
+        (payload) => {
+          const msg = payload.new;
+          if (msg.sender_id === profile.id) return; // skip own (already optimistic)
+          const formatted = {
+            id:     msg.id,
+            sender: "them",
+            body:   msg.body,
+            time:   new Date(msg.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            date:   formatMsgDate(msg.sent_at),
+          };
+          setConversations(prev => prev.map(c =>
+            c.id !== msg.conversation_id ? c : {
+              ...c,
+              messages:    [...c.messages, formatted],
+              unreadCount: activeConvoRef.current === c.id ? c.unreadCount : c.unreadCount + 1,
+            }
+          ));
+        }
+      )
+      .subscribe();
+    return () => supabase.removeChannel(channel);
   }, [profile]);
 
   // ── Buy Me a Coffee widget ───────────────────────────────────
@@ -914,9 +1013,7 @@ export default function HotPotsApp() {
     });
   };
 
-  const totalUnread = conversations.reduce((n, c) => {
-    return n + c.messages.filter(m => m.sender === "them").length > 0 ? n + 1 : n;
-  }, 0);
+  const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
 
 
 
@@ -1312,9 +1409,9 @@ export default function HotPotsApp() {
                 {conversations.map(c => {
                   const days = daysLeft(c.expiresAt);
                   const lastMsg = c.messages[c.messages.length - 1];
-                  const hasUnread = c.messages.some(m => m.sender === "them");
+                  const hasUnread = (c.unreadCount ?? 0) > 0;
                   return (
-                    <div key={c.id} className={`convo-card ${hasUnread?"unread":""}`} onClick={()=>setActiveConvo(c.id)}>
+                    <div key={c.id} className={`convo-card ${hasUnread?"unread":""}`} onClick={()=>{ setActiveConvo(c.id); setConversations(prev => prev.map(c2 => c2.id !== c.id ? c2 : { ...c2, unreadCount: 0 })); }}>
                       <div className="convo-avatar">{c.partner.initials}</div>
                       <div className="convo-info">
                         <div className="convo-name">{c.partner.name}</div>
@@ -1381,7 +1478,18 @@ export default function HotPotsApp() {
             ...(["admin","helper"].includes(profile?.role) ? [{id:"admin", icon:"⚙️", label:"Admin"}] : []),
           ].map(n=>(
             <button key={n.id} className={`nav-btn ${tab===n.id?"active":""}`} onClick={()=>{ setTab(n.id); if(n.id!=="messages") setActiveConvo(null); }}>
-              <span className="nav-icon">{n.icon}</span>
+              <span className="nav-icon" style={{ position:"relative", display:"inline-block" }}>
+                {n.icon}
+                {n.id==="messages" && totalUnread > 0 && (
+                  <span style={{
+                    position:"absolute", top:-4, right:-8,
+                    background:"#E8450A", color:"white",
+                    borderRadius:"50%", minWidth:16, height:16,
+                    fontSize:9, fontWeight:700,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                  }}>{totalUnread > 9 ? "9+" : totalUnread}</span>
+                )}
+              </span>
               <span className="nav-label">{n.label}</span>
             </button>
           ))}
