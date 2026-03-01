@@ -262,6 +262,7 @@ export default function CameraCapture({ onCapture, onClear, existingUrl, label =
   const [flash, setFlash]           = useState(false);
   const [errorMsg, setErrorMsg]     = useState("");
   const [cameraAvailable, setCameraAvailable] = useState(true);
+  const [sizeWarning, setSizeWarning] = useState(false);
 
   const videoRef    = useRef(null);
   const streamRef   = useRef(null);
@@ -369,8 +370,10 @@ export default function CameraCapture({ onCapture, onClear, existingUrl, label =
 
   // ── Confirm captured photo ────────────────────────────────────
   const confirmPhoto = useCallback(() => {
+    const file = canvasRef._pendingFile;
+    setSizeWarning(file?.size > 1_000_000);
     setPhase("confirmed");
-    onCapture?.(canvasRef._pendingFile, canvasRef._pendingUrl);
+    onCapture?.(file, canvasRef._pendingUrl);
   }, [onCapture]);
 
   // ── Retake ───────────────────────────────────────────────────
@@ -385,6 +388,7 @@ export default function CameraCapture({ onCapture, onClear, existingUrl, label =
     setPhase("idle");
     setCameraAvailable(true);
     setErrorMsg("");
+    setSizeWarning(false);
     onClear?.();
   }, [onClear]);
 
@@ -446,15 +450,26 @@ export default function CameraCapture({ onCapture, onClear, existingUrl, label =
 
         {/* ── CONFIRMED thumbnail ── */}
         {phase === "confirmed" && previewUrl && (
-          <div className="cam-confirmed">
-            <img src={previewUrl} alt={label} />
-            <div className="cam-confirmed-bar">
-              <span className="cam-confirmed-label">📷 {label}</span>
-              <button className="cam-confirmed-clear" onClick={clear}>
-                Retake
-              </button>
+          <>
+            <div className="cam-confirmed">
+              <img src={previewUrl} alt={label} />
+              <div className="cam-confirmed-bar">
+                <span className="cam-confirmed-label">📷 {label}</span>
+                <button className="cam-confirmed-clear" onClick={clear}>
+                  Retake
+                </button>
+              </div>
             </div>
-          </div>
+            {sizeWarning && (
+              <div className="cam-error" style={{ marginTop: 8 }}>
+                <span className="cam-error-icon">⚠️</span>
+                <div className="cam-error-text">
+                  This photo is over 1 MB after compression and may fail to upload.
+                  Try retaking in better lighting or with less detail in the background.
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* ── VIEWFINDER (full-screen modal) ── */}
