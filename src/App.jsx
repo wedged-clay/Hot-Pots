@@ -730,6 +730,7 @@ export default function HotPotsApp() {
   const [round,         setRound]         = useState(null);
   const [gallery,       setGallery]       = useState([]);
   const [matches,       setMatches]       = useState([]);
+  const [profileStats,  setProfileStats]  = useState({ rounds: 0, piecesGiven: 0 });
   const [tab,           setTab]           = useState(validTabs.includes(urlTab) ? urlTab : "home");
   const [submitted,     setSubmitted]     = useState(false);
   const [rankings,      setRankings]      = useState([]);
@@ -867,6 +868,15 @@ export default function HotPotsApp() {
           };
         }));
       });
+  }, [profile]);
+
+  // ── Fetch profile stats (submission count → rounds + pieces) ──
+  useEffect(() => {
+    if (!profile) { setProfileStats({ rounds: 0, piecesGiven: 0 }); return; }
+    supabase.from("submissions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .then(({ count }) => setProfileStats({ rounds: count ?? 0, piecesGiven: (count ?? 0) * 2 }));
   }, [profile]);
 
   // ── Keep activeConvoRef in sync (for Realtime closure) ───────
@@ -1443,9 +1453,9 @@ export default function HotPotsApp() {
                 <div className="profile-name">{profile?.display_name ?? "…"}</div>
                 <div style={{fontSize:13, color:"#92400E"}}>Studio Member since {profile ? new Date(profile.created_at).getFullYear() : "…"}</div>
                 <div className="profile-stats">
-                  <div className="stat"><div className="stat-num">8</div><div className="stat-label">Swaps</div></div>
-                  <div className="stat"><div className="stat-num">5</div><div className="stat-label">Rounds</div></div>
-                  <div className="stat"><div className="stat-num">12</div><div className="stat-label">Pieces Given</div></div>
+                  <div className="stat"><div className="stat-num">{matches.length}</div><div className="stat-label">Swaps</div></div>
+                  <div className="stat"><div className="stat-num">{profileStats.rounds}</div><div className="stat-label">Rounds</div></div>
+                  <div className="stat"><div className="stat-num">{profileStats.piecesGiven}</div><div className="stat-label">Pieces Given</div></div>
                 </div>
               </div>
               <button className="btn-secondary">Edit Profile</button>
