@@ -16,7 +16,8 @@
 //   4. Render <AdminPortal role={mockUser.role} /> when tab === "admin"
 // ============================================================
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "../supabase/client";
 
 // ── Shared colours (mirrors main app) ────────────────────────
 const C = {
@@ -30,45 +31,15 @@ const C = {
   blush:    "#FDE8D8",
 };
 
-// ── Mock data ─────────────────────────────────────────────────
-const mockRounds = [
-  { id:"r1", title:"Spring Equinox Swap", status:"open",     opens:"Mar 1",  closes:"Mar 22", participants:18, matched:0,  unmatched:0  },
-  { id:"r2", title:"Winter Warmth Round", status:"complete", opens:"Jan 5",  closes:"Jan 26", participants:24, matched:22, unmatched:2  },
-  { id:"r3", title:"Autumn Harvest Swap", status:"complete", opens:"Oct 10", closes:"Oct 31", participants:20, matched:20, unmatched:0  },
-];
+// ── Helpers ───────────────────────────────────────────────────
+function toInitials(name) {
+  return (name ?? "?").split(" ").filter(Boolean).map(w => w[0]).join("").toUpperCase().slice(0, 2) || "?";
+}
 
-const mockMembers = [
-  { id:"u1", name:"Maya Chen",      initials:"MC", email:"maya@studio.com",    role:"admin",  status:"active",   joined:"Jan 2024", pieces:6, swaps:3  },
-  { id:"u2", name:"James Okafor",   initials:"JO", email:"james@studio.com",   role:"helper", status:"active",   joined:"Feb 2024", pieces:4, swaps:2  },
-  { id:"u3", name:"Priya Nair",     initials:"PN", email:"priya@studio.com",   role:"member", status:"active",   joined:"Mar 2024", pieces:8, swaps:4  },
-  { id:"u4", name:"Tom Whitfield",  initials:"TW", email:"tom@studio.com",     role:"member", status:"active",   joined:"Mar 2024", pieces:3, swaps:1  },
-  { id:"u5", name:"Sara Lindqvist", initials:"SL", email:"sara@studio.com",    role:"member", status:"active",   joined:"Apr 2024", pieces:5, swaps:2  },
-  { id:"u6", name:"Dev Patel",      initials:"DP", email:"dev@studio.com",     role:"member", status:"pending",  joined:"May 2024", pieces:0, swaps:0  },
-  { id:"u7", name:"Chloe Morrow",   initials:"CM", email:"chloe@studio.com",   role:"member", status:"suspended",joined:"Jun 2024", pieces:2, swaps:0  },
-];
-
-const mockMatches = [
-  { id:"m1", roundId:"r1", type:"random", userA:"Priya Nair",    pieceA:"Celadon Yunomi",      userB:"Tom Whitfield",  pieceB:"Ash Glaze Bowl",      status:"matched"   },
-  { id:"m2", roundId:"r1", type:"choice", userA:"Sara Lindqvist",pieceA:"Raku Vase",           userB:"Maya Chen",     pieceB:"Terracotta Planter",  status:"matched"   },
-  { id:"m3", roundId:"r1", type:"random", userA:"James Okafor",  pieceA:"Soda-fired Cup",      userB:"Dev Patel",     pieceB:"—",                   status:"unmatched" },
-  { id:"m4", roundId:"r2", type:"choice", userA:"Priya Nair",    pieceA:"Shino Bowl",          userB:"Sara Lindqvist",pieceB:"Cobalt Mug",          status:"matched"   },
-  { id:"m5", roundId:"r2", type:"random", userA:"Tom Whitfield", pieceA:"Stoneware Jug",       userB:"Maya Chen",     pieceB:"Wood-fire Plate",     status:"matched"   },
-  { id:"m6", roundId:"r2", type:"choice", userA:"James Okafor",  pieceA:"Porcelain Cup",       userB:"Chloe Morrow",  pieceB:"Earthenware Vase",    status:"unmatched" },
-];
-
-const mockStats = {
-  totalMembers: 34,
-  activeMembers: 28,
-  totalRounds: 6,
-  totalMatches: 87,
-  avgParticipation: 76,
-  matchRate: 94,
-  messagesSent: 412,
-  monthlyGrowth: [8,12,14,18,22,28,34],
-  monthLabels: ["Aug","Sep","Oct","Nov","Dec","Jan","Feb"],
-  roundParticipation: [14,18,20,16,24,18],
-  roundLabels: ["R1","R2","R3","R4","R5","R6"],
-};
+function fmtDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+}
 
 // ── Styles ────────────────────────────────────────────────────
 const adminStyles = `
@@ -367,8 +338,7 @@ function BarChart({ title, labels, values, max }) {
 }
 
 // ── Section: Round Management ─────────────────────────────────
-function RoundManagement({ isAdmin }) {
-  const [rounds, setRounds] = useState(mockRounds);
+function RoundManagement({ isAdmin, rounds, refreshRounds }) {
   const [modal, setModal]   = useState(null); // null | 'new' | 'confirm-match' | 'confirm-close'
   const [activeRound, setActiveRound] = useState(null);
   const [toast, setToast]   = useState(null);
@@ -381,18 +351,24 @@ function RoundManagement({ isAdmin }) {
     setModal(action);
   };
 
-  const confirmAction = () => {
+  const confirmAction = async () => {
     if (modal === "confirm-match") {
-      setRounds(r => r.map(rd => rd.id === activeRound.id ? {...rd, status:"matching"} : rd));
-      showToast("🎲 Matching algorithm triggered!");
+      // Matching Edge Function — wired in Phase 8
+      showToast("🎲 Matching algorithm not yet configured");
     }
     if (modal === "confirm-close") {
-      setRounds(r => r.map(rd => rd.id === activeRound.id ? {...rd, status:"complete"} : rd));
+      await supabase.from("raffle_rounds").update({ status: "complete" }).eq("id", activeRound.id);
+      refreshRounds();
       showToast("✅ Round closed");
     }
     if (modal === "new") {
-      const newR = { id:`r${Date.now()}`, ...newRound, status:"open", participants:0, matched:0, unmatched:0 };
-      setRounds(r => [newR, ...r]);
+      await supabase.from("raffle_rounds").insert({
+        title:     newRound.title,
+        status:    "open",
+        opens_at:  newRound.opens  || null,
+        closes_at: newRound.closes || null,
+      });
+      refreshRounds();
       showToast("🔥 New round opened!");
       setNewRound({ title:"", opens:"", closes:"" });
     }
@@ -417,7 +393,7 @@ function RoundManagement({ isAdmin }) {
             <div>
               <div className="adm-card-title">{round.title}</div>
               <div className="adm-card-meta">
-                {round.opens} → {round.closes} · {round.participants} participants
+                {fmtDate(round.opens_at)} → {fmtDate(round.closes_at)} · {round.participants} participants
               </div>
             </div>
             <span className={`status-pill status-${round.status}`}>{round.status}</span>
@@ -516,21 +492,71 @@ function RoundManagement({ isAdmin }) {
 }
 
 // ── Section: Match Oversight ──────────────────────────────────
-function MatchOversight({ isAdmin }) {
-  const [roundFilter, setRoundFilter] = useState("all");
+function MatchOversight({ isAdmin, rounds }) {
+  const [matches, setMatches]           = useState([]);
+  const [members, setMembers]           = useState([]);
+  const [roundFilter, setRoundFilter]   = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [pairModal, setPairModal]     = useState(false);
-  const [toast, setToast]             = useState(null);
+  const [pairModal, setPairModal]       = useState(false);
+  const [toast, setToast]               = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(null), 2500); };
 
-  const filtered = mockMatches.filter(m => {
+  useEffect(() => {
+    async function load() {
+      const { data: matchRows } = await supabase
+        .from("matches")
+        .select(`
+          id, match_type, submission_a, submission_b, round_id,
+          round:raffle_rounds!round_id(id, title),
+          sub_a:submissions!submission_a(id, piece_1_name, profiles!user_id(display_name)),
+          sub_b:submissions!submission_b(id, piece_1_name, profiles!user_id(display_name))
+        `);
+
+      const { data: allSubs } = await supabase
+        .from("submissions")
+        .select("id, piece_1_name, round_id, profiles!user_id(display_name)");
+
+      const matched    = matchRows ?? [];
+      const matchedIds = new Set(matched.flatMap(m => [m.submission_a, m.submission_b].filter(Boolean)));
+
+      setMatches([
+        ...matched.map(m => ({
+          id:      m.id,
+          roundId: m.round?.id,
+          type:    m.match_type,
+          status:  "matched",
+          userA:   m.sub_a?.profiles?.display_name ?? "—",
+          userB:   m.sub_b?.profiles?.display_name ?? "—",
+          pieceA:  m.sub_a?.piece_1_name ?? "—",
+          pieceB:  m.sub_b?.piece_1_name ?? "—",
+        })),
+        ...(allSubs ?? [])
+          .filter(s => !matchedIds.has(s.id))
+          .map(s => ({
+            id:      `unm-${s.id}`,
+            roundId: s.round_id,
+            type:    "random",
+            status:  "unmatched",
+            userA:   s.profiles?.display_name ?? "—",
+            userB:   "—",
+            pieceA:  s.piece_1_name ?? "—",
+            pieceB:  "—",
+          })),
+      ]);
+    }
+
+    supabase.from("profiles").select("id, display_name")
+      .then(({ data }) => setMembers(data ?? []));
+    load();
+  }, []);
+
+  const filtered  = matches.filter(m => {
     if (roundFilter !== "all" && m.roundId !== roundFilter) return false;
     if (statusFilter !== "all" && m.status !== statusFilter) return false;
     return true;
   });
-
-  const unmatched = mockMatches.filter(m => m.status === "unmatched");
+  const unmatched = matches.filter(m => m.status === "unmatched");
 
   return (
     <div className="adm-section">
@@ -555,10 +581,10 @@ function MatchOversight({ isAdmin }) {
 
       {/* Filters */}
       <div className="adm-filter-row">
-        {["all","r1","r2"].map(f => (
-          <button key={f} className={`adm-filter-btn ${roundFilter===f?"active":""}`}
-            onClick={()=>setRoundFilter(f)}>
-            {f==="all"?"All Rounds": mockRounds.find(r=>r.id===f)?.title.split(" ").slice(0,2).join(" ")}
+        {[{ id:"all", label:"All Rounds" }, ...rounds.map(r => ({ id:r.id, label:r.title.split(" ").slice(0,2).join(" ") }))].map(f => (
+          <button key={f.id} className={`adm-filter-btn ${roundFilter===f.id?"active":""}`}
+            onClick={()=>setRoundFilter(f.id)}>
+            {f.label}
           </button>
         ))}
       </div>
@@ -612,18 +638,14 @@ function MatchOversight({ isAdmin }) {
               <label className="adm-modal-label">Member A</label>
               <select className="adm-modal-input">
                 <option>Select member…</option>
-                {mockMembers.filter(m=>m.status==="active").map(m=>(
-                  <option key={m.id}>{m.name}</option>
-                ))}
+                {members.map(m => <option key={m.id} value={m.id}>{m.display_name}</option>)}
               </select>
             </div>
             <div className="adm-modal-field">
               <label className="adm-modal-label">Member B</label>
               <select className="adm-modal-input">
                 <option>Select member…</option>
-                {mockMembers.filter(m=>m.status==="active").map(m=>(
-                  <option key={m.id}>{m.name}</option>
-                ))}
+                {members.map(m => <option key={m.id} value={m.id}>{m.display_name}</option>)}
               </select>
             </div>
             <div className="adm-modal-field">
@@ -647,7 +669,55 @@ function MatchOversight({ isAdmin }) {
 }
 
 // ── Section: Usage Stats ──────────────────────────────────────
-function UsageStats() {
+function UsageStats({ rounds }) {
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    async function load() {
+      const [
+        { count: totalMembers },
+        { count: totalMessages },
+        { count: totalMatches },
+        { count: totalSubs },
+      ] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("messages").select("id", { count: "exact", head: true }),
+        supabase.from("matches").select("id", { count: "exact", head: true }),
+        supabase.from("submissions").select("id", { count: "exact", head: true }),
+      ]);
+
+      const matchRate = totalSubs > 0
+        ? Math.round(((totalMatches ?? 0) * 2 / totalSubs) * 100)
+        : 0;
+
+      const { data: subsByRound } = await supabase
+        .from("submissions").select("round_id");
+
+      const roundCounts = {};
+      (subsByRound ?? []).forEach(s => {
+        roundCounts[s.round_id] = (roundCounts[s.round_id] ?? 0) + 1;
+      });
+
+      setStats({
+        totalMembers: totalMembers ?? 0,
+        messagesSent: totalMessages ?? 0,
+        matchRate,
+        totalRounds:  rounds.length,
+        roundCounts,
+      });
+    }
+    load();
+  }, [rounds]);
+
+  if (!stats) return (
+    <div className="adm-section">
+      <div className="adm-empty" style={{paddingTop:40}}>Loading…</div>
+    </div>
+  );
+
+  const roundLabels = rounds.map(r => r.title.split(" ").slice(0, 2).join(" "));
+  const roundValues = rounds.map(r => stats.roundCounts[r.id] ?? 0);
+
   return (
     <div className="adm-section">
       <div className="adm-heading">Usage Stats</div>
@@ -655,106 +725,96 @@ function UsageStats() {
 
       <div className="stat-grid">
         <div className="stat-cell">
-          <div className="stat-value">{mockStats.totalMembers}</div>
+          <div className="stat-value">{stats.totalMembers}</div>
           <div className="stat-label">Total Members</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-value">{mockStats.activeMembers}</div>
-          <div className="stat-label">Active (30d)</div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-value">{mockStats.matchRate}%</div>
+          <div className="stat-value">{stats.matchRate}%</div>
           <div className="stat-label">Match Rate</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-value">{mockStats.avgParticipation}%</div>
-          <div className="stat-label">Avg Participation</div>
-        </div>
-        <div className="stat-cell">
-          <div className="stat-value">{mockStats.totalRounds}</div>
+          <div className="stat-value">{stats.totalRounds}</div>
           <div className="stat-label">Rounds Run</div>
         </div>
         <div className="stat-cell">
-          <div className="stat-value">{mockStats.messagesSent}</div>
+          <div className="stat-value">{stats.messagesSent}</div>
           <div className="stat-label">Messages Sent</div>
         </div>
       </div>
 
-      <BarChart
-        title="Member Growth"
-        labels={mockStats.monthLabels}
-        values={mockStats.monthlyGrowth}
-        max={40}
-      />
-
-      <BarChart
-        title="Participants per Round"
-        labels={mockStats.roundLabels}
-        values={mockStats.roundParticipation}
-        max={30}
-      />
-
-      <div className="adm-card">
-        <div className="adm-card-title">Current Round Snapshot</div>
-        <div style={{marginTop:10}}>
-          {[
-            { label:"Submissions received", value:"18 / 34 members", pct:53 },
-            { label:"Piece 2 rankings done", value:"14 / 18 submitted", pct:78 },
-            { label:"Push notifications enabled", value:"22 / 34 members", pct:65 },
-          ].map(row => (
-            <div key={row.label} style={{marginBottom:12}}>
-              <div style={{display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:4}}>
-                <span style={{color:C.bark}}>{row.label}</span>
-                <span style={{color:"#92400E"}}>{row.value}</span>
-              </div>
-              <div style={{height:6, background:"#FEF3C7", borderRadius:3, overflow:"hidden"}}>
-                <div style={{width:`${row.pct}%`, height:"100%", borderRadius:3, background:`linear-gradient(90deg, ${C.ember}, ${C.ochre})`}} />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      {roundLabels.length > 0 && (
+        <BarChart
+          title="Submissions per Round"
+          labels={roundLabels}
+          values={roundValues}
+        />
+      )}
     </div>
   );
 }
 
 // ── Section: Member Management ────────────────────────────────
 function MemberManagement({ isAdmin }) {
-  const [members, setMembers] = useState(mockMembers);
-  const [filter, setFilter]   = useState("all");
-  const [modal, setModal]     = useState(null); // null | { type, member }
-  const [toast, setToast]     = useState(null);
-  const [inviteCode] = useState("KILN42");
+  const [members, setMembers]           = useState([]);
+  const [filter, setFilter]             = useState("all");
+  const [modal, setModal]               = useState(null); // null | { type, member }
+  const [toast, setToast]               = useState(null);
+  const [inviteCode, setInviteCode]     = useState("—");
+  const [inviteCodeId, setInviteCodeId] = useState(null);
 
   const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(null), 2500); };
 
-  const filteredMembers = members.filter(m => filter === "all" || m.status === filter || m.role === filter);
+  useEffect(() => {
+    supabase.from("profiles")
+      .select("id, display_name, role")
+      .order("display_name")
+      .then(({ data }) => {
+        setMembers((data ?? []).map(m => ({
+          id:       m.id,
+          name:     m.display_name ?? "Unknown",
+          initials: toInitials(m.display_name),
+          role:     m.role ?? "member",
+        })));
+      });
+
+    supabase.from("studio_codes")
+      .select("id, code")
+      .limit(1)
+      .single()
+      .then(({ data }) => {
+        if (data) { setInviteCode(data.code); setInviteCodeId(data.id); }
+      });
+  }, []);
+
+  const filteredMembers = members.filter(m => filter === "all" || m.role === filter);
 
   const handleAction = (type, member) => setModal({ type, member });
 
-  const confirmAction = () => {
+  const confirmAction = async () => {
     const { type, member } = modal;
-    if (type === "approve") {
-      setMembers(ms => ms.map(m => m.id===member.id ? {...m, status:"active"} : m));
-      showToast(`✅ ${member.name} approved`);
-    }
-    if (type === "suspend") {
-      setMembers(ms => ms.map(m => m.id===member.id ? {...m, status:"suspended"} : m));
-      showToast(`⚠️ ${member.name} suspended`);
-    }
-    if (type === "reinstate") {
-      setMembers(ms => ms.map(m => m.id===member.id ? {...m, status:"active"} : m));
-      showToast(`✅ ${member.name} reinstated`);
-    }
     if (type === "make-helper") {
+      await supabase.from("profiles").update({ role: "helper" }).eq("id", member.id);
       setMembers(ms => ms.map(m => m.id===member.id ? {...m, role:"helper"} : m));
       showToast(`🔑 ${member.name} is now a helper`);
     }
     if (type === "make-member") {
+      await supabase.from("profiles").update({ role: "member" }).eq("id", member.id);
       setMembers(ms => ms.map(m => m.id===member.id ? {...m, role:"member"} : m));
       showToast(`${member.name} changed to member`);
     }
     setModal(null);
+  };
+
+  const regenerateCode = async () => {
+    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    if (inviteCodeId) {
+      await supabase.from("studio_codes").update({ code: newCode }).eq("id", inviteCodeId);
+    } else {
+      const { data } = await supabase.from("studio_codes").insert({ code: newCode }).select().single();
+      if (data) setInviteCodeId(data.id);
+    }
+    setInviteCode(newCode);
+    showToast("New invite code generated!");
   };
 
   return (
@@ -769,15 +829,13 @@ function MemberManagement({ isAdmin }) {
           <div className="invite-code-val">{inviteCode}</div>
         </div>
         {isAdmin && (
-          <button className="btn-sm btn-ghost-sm" onClick={()=>showToast("New code generated!")}>
-            Regenerate
-          </button>
+          <button className="btn-sm btn-ghost-sm" onClick={regenerateCode}>Regenerate</button>
         )}
       </div>
 
       {/* Filters */}
       <div className="adm-filter-row">
-        {["all","active","pending","suspended","admin","helper"].map(f => (
+        {["all","admin","helper","member"].map(f => (
           <button key={f} className={`adm-filter-btn ${filter===f?"active":""}`}
             onClick={()=>setFilter(f)}>
             {f.charAt(0).toUpperCase()+f.slice(1)}
@@ -785,34 +843,29 @@ function MemberManagement({ isAdmin }) {
         ))}
       </div>
 
+      {filteredMembers.length === 0 && (
+        <div className="adm-empty">
+          <div className="adm-empty-icon">👥</div>
+          No members found.
+        </div>
+      )}
+
       {filteredMembers.map(member => (
         <div className="member-row" key={member.id}>
           <div className="member-avatar">{member.initials}</div>
           <div style={{flex:1, minWidth:0}}>
             <div className="member-name">{member.name}</div>
-            <div className="member-email">{member.email}</div>
             <div className="member-pills">
               <span className={`role-pill role-${member.role}`}>{member.role}</span>
-              <span className={`status-pill status-${member.status}`}>{member.status}</span>
-              <span style={{fontSize:10, color:"#92400E"}}>{member.swaps} swaps</span>
             </div>
           </div>
-          {isAdmin && (
+          {isAdmin && member.role !== "admin" && (
             <div className="member-actions">
-              {member.status === "pending" && (
-                <button className="btn-sm btn-success-sm" onClick={()=>handleAction("approve", member)}>Approve</button>
-              )}
-              {member.status === "active" && member.role === "member" && (
+              {member.role === "member" && (
                 <button className="btn-sm btn-ghost-sm" onClick={()=>handleAction("make-helper", member)}>→ Helper</button>
               )}
-              {member.status === "active" && member.role === "helper" && (
+              {member.role === "helper" && (
                 <button className="btn-sm btn-neutral-sm" onClick={()=>handleAction("make-member", member)}>→ Member</button>
-              )}
-              {member.status === "active" && member.role !== "admin" && (
-                <button className="btn-sm btn-danger-sm" onClick={()=>handleAction("suspend", member)}>Suspend</button>
-              )}
-              {member.status === "suspended" && (
-                <button className="btn-sm btn-success-sm" onClick={()=>handleAction("reinstate", member)}>Reinstate</button>
               )}
             </div>
           )}
@@ -824,26 +877,19 @@ function MemberManagement({ isAdmin }) {
         <div className="adm-modal-backdrop" onClick={e=>e.target===e.currentTarget && setModal(null)}>
           <div className="adm-modal">
             <div className="adm-modal-title">
-              {modal.type==="approve"     && "Approve Member"}
-              {modal.type==="suspend"     && "Suspend Member"}
-              {modal.type==="reinstate"   && "Reinstate Member"}
               {modal.type==="make-helper" && "Make Helper"}
               {modal.type==="make-member" && "Change to Member"}
             </div>
-            <div className={`confirm-box ${modal.type==="suspend"?"danger":""}`}>
+            <div className="confirm-box">
               <div className="confirm-box-title">{modal.member.name}</div>
               <div className="confirm-box-text">
-                {modal.type==="approve"     && "They'll receive access to the app and can enter the current round."}
-                {modal.type==="suspend"     && "They'll lose access to the app immediately. Their past matches won't be affected."}
-                {modal.type==="reinstate"   && "Their account will be restored to active status."}
                 {modal.type==="make-helper" && "They'll be able to view stats and matches, but cannot open/close rounds or change member roles."}
                 {modal.type==="make-member" && "They'll revert to standard member permissions."}
               </div>
             </div>
             <div style={{display:"flex", gap:10}}>
               <button className="btn-sm btn-neutral-sm" style={{flex:1, padding:"11px"}} onClick={()=>setModal(null)}>Cancel</button>
-              <button className={`btn-sm ${modal.type==="suspend"?"btn-danger-sm":"btn-primary-sm"}`}
-                style={{flex:2, padding:"11px"}} onClick={confirmAction}>
+              <button className="btn-sm btn-primary-sm" style={{flex:2, padding:"11px"}} onClick={confirmAction}>
                 Confirm
               </button>
             </div>
@@ -866,6 +912,37 @@ export default function AdminPortal({ role = "admin" }) {
     { id:"members", label:"👥 Members" },
   ];
   const [section, setSection] = useState("rounds");
+  const [rounds,  setRounds]  = useState([]);
+
+  async function fetchRounds() {
+    const { data } = await supabase
+      .from("raffle_rounds")
+      .select("id, title, status, opens_at, closes_at")
+      .order("opens_at", { ascending: false });
+    if (!data) return;
+
+    const roundIds = data.map(r => r.id);
+    if (roundIds.length === 0) { setRounds([]); return; }
+
+    const [{ data: subs }, { data: matchData }] = await Promise.all([
+      supabase.from("submissions").select("round_id").in("round_id", roundIds),
+      supabase.from("matches").select("id, round_id").in("round_id", roundIds),
+    ]);
+
+    const subCounts   = {};
+    (subs ?? []).forEach(s => { subCounts[s.round_id]   = (subCounts[s.round_id]   ?? 0) + 1; });
+    const matchCounts = {};
+    (matchData ?? []).forEach(m => { matchCounts[m.round_id] = (matchCounts[m.round_id] ?? 0) + 1; });
+
+    setRounds(data.map(r => ({
+      ...r,
+      participants: subCounts[r.id]   ?? 0,
+      matched:      (matchCounts[r.id] ?? 0) * 2,
+      unmatched:    Math.max(0, (subCounts[r.id] ?? 0) - (matchCounts[r.id] ?? 0) * 2),
+    })));
+  }
+
+  useEffect(() => { fetchRounds(); }, []);
 
   return (
     <>
@@ -897,9 +974,9 @@ export default function AdminPortal({ role = "admin" }) {
         </div>
 
         {/* Sections */}
-        {section === "rounds"  && <RoundManagement isAdmin={isAdmin} />}
-        {section === "matches" && <MatchOversight  isAdmin={isAdmin} />}
-        {section === "stats"   && <UsageStats />}
+        {section === "rounds"  && <RoundManagement isAdmin={isAdmin} rounds={rounds} refreshRounds={fetchRounds} />}
+        {section === "matches" && <MatchOversight  isAdmin={isAdmin} rounds={rounds} />}
+        {section === "stats"   && <UsageStats rounds={rounds} />}
         {section === "members" && <MemberManagement isAdmin={isAdmin} />}
       </div>
     </>
