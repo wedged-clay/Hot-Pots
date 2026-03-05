@@ -654,18 +654,37 @@ function toInitials(name) {
   return (name ?? "?").split(" ").filter(Boolean).map(w => w[0]).join("").toUpperCase().slice(0, 2) || "?";
 }
 
+function formatCountdown(closesAt) {
+  if (!closesAt) return null;
+  const diff = new Date(closesAt) - Date.now();
+  if (diff <= 0) return { label: "Closed", urgent: true };
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  if (hours < 24) return { label: `Closes in ${hours}h`, urgent: true };
+  const days = Math.floor(hours / 24);
+  return { label: `Closes in ${days} day${days === 1 ? "" : "s"}`, urgent: days <= 2 };
+}
+
 // ─── PieceForm component ───────────────────────────────────────
-const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor }, ref) {
+const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor, storageKey }, ref) {
+  const saved = storageKey ? JSON.parse(localStorage.getItem(storageKey) || "{}") : {};
+
   const [photoFile, setPhotoFile] = useState(null);
   const [photoUrl,  setPhotoUrl]  = useState(null);
-  const [name,        setName]        = useState("");
-  const [clayBody,    setClayBody]    = useState("");
-  const [method,      setMethod]      = useState("");
-  const [glaze,       setGlaze]       = useState("");
-  const [description, setDescription] = useState("");
+  const [name,        setName]        = useState(saved.name        ?? "");
+  const [clayBody,    setClayBody]    = useState(saved.clayBody    ?? "");
+  const [method,      setMethod]      = useState(saved.method      ?? "");
+  const [glaze,       setGlaze]       = useState(saved.glaze       ?? "");
+  const [description, setDescription] = useState(saved.description ?? "");
+
+  // Persist text fields to localStorage on every change
+  useEffect(() => {
+    if (!storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify({ name, clayBody, method, glaze, description }));
+  }, [storageKey, name, clayBody, method, glaze, description]);
 
   useImperativeHandle(ref, () => ({
     getValue: () => ({ photoFile, name, clayBody, method, glaze, description }),
+    clearDraft: () => { if (storageKey) localStorage.removeItem(storageKey); },
   }));
 
   return (
@@ -813,8 +832,8 @@ export default function HotPotsApp() {
     // Match history
     supabase.from("matches")
       .select(`id, match_type, matched_at,
-        sub_a:submissions!submission_a(user_id, piece_1_name, piece_2_name, profiles!user_id(display_name)),
-        sub_b:submissions!submission_b(user_id, piece_1_name, piece_2_name, profiles!user_id(display_name)),
+        sub_a:submissions!submission_a(user_id, piece_1_name, piece_2_name, piece_1_photo_url, piece_2_photo_url, profiles!user_id(display_name)),
+        sub_b:submissions!submission_b(user_id, piece_1_name, piece_2_name, piece_1_photo_url, piece_2_photo_url, profiles!user_id(display_name)),
         raffle_rounds!round_id(title)`)
       .or(`submission_a.in.(select id from submissions where user_id='${profile.id}'),submission_b.in.(select id from submissions where user_id='${profile.id}')`)
       .then(({ data }) => {
@@ -822,13 +841,16 @@ export default function HotPotsApp() {
         setMatches(data.map(m => {
           const mine = m.sub_a?.user_id === profile.id ? m.sub_a : m.sub_b;
           const theirs = m.sub_a?.user_id === profile.id ? m.sub_b : m.sub_a;
+          const isRandom = m.match_type === "random";
           return {
-            id:           m.id,
-            round:        m.raffle_rounds?.title ?? "Past Round",
-            partner:      theirs?.profiles?.display_name ?? "Member",
-            myPiece:      m.match_type === "random" ? mine?.piece_1_name : mine?.piece_2_name,
-            partnerPiece: m.match_type === "random" ? theirs?.piece_1_name : theirs?.piece_2_name,
-            type:         m.match_type,
+            id:               m.id,
+            round:            m.raffle_rounds?.title ?? "Past Round",
+            partner:          theirs?.profiles?.display_name ?? "Member",
+            myPiece:          isRandom ? mine?.piece_1_name       : mine?.piece_2_name,
+            partnerPiece:     isRandom ? theirs?.piece_1_name     : theirs?.piece_2_name,
+            myPhotoUrl:       isRandom ? mine?.piece_1_photo_url  : mine?.piece_2_photo_url,
+            partnerPhotoUrl:  isRandom ? theirs?.piece_1_photo_url : theirs?.piece_2_photo_url,
+            type:             m.match_type,
           };
         }));
       });
@@ -1017,6 +1039,8 @@ export default function HotPotsApp() {
     });
 
     if (error) { setSubmitError(error.message); setIsSubmitting(false); return; }
+    piece1Ref.current?.clearDraft();
+    piece2Ref.current?.clearDraft();
     setSubmitted(true);
     setIsSubmitting(false);
   };
@@ -1175,7 +1199,15 @@ export default function HotPotsApp() {
               <div className="round-banner">
                 <div className="round-status">● Open Now</div>
                 <div className="round-title">{round?.title ?? "Loading…"}</div>
-                <div className="round-meta">Closes {round ? new Date(round.closes_at).toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : "…"}</div>
+                {(() => {
+                  const cd = round ? formatCountdown(round.closes_at) : null;
+                  return (
+                    <div className="round-meta" style={cd?.urgent ? { color: "#C1440E", fontWeight: 600 } : {}}>
+                      {cd ? cd.label : "…"}
+                      {" · "}{round ? new Date(round.closes_at).toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : ""}
+                    </div>
+                  );
+                })()}
                 <div className="round-progress">
                   <div className="round-progress-fill" style={{width:`${progress}%`}} />
                 </div>
@@ -1240,6 +1272,20 @@ export default function HotPotsApp() {
           {/* ── ENTER RAFFLE ── */}
           {tab==="enter" && (
             <div style={{paddingTop:20}}>
+              {round?.closes_at && (() => {
+                const cd = formatCountdown(round.closes_at);
+                return (
+                  <div style={{
+                    textAlign: "center", padding: "8px 16px", borderRadius: 10, marginBottom: 16,
+                    background: cd.urgent ? "#FEF2F2" : C.sand,
+                    border: `1px solid ${cd.urgent ? "#FCA5A5" : C.ochre + "44"}`,
+                    fontSize: 13, fontWeight: 600,
+                    color: cd.urgent ? "#C1440E" : C.bark,
+                  }}>
+                    {cd.label}
+                  </div>
+                );
+              })()}
               {submitted ? (
                 <div style={{textAlign:"center", paddingTop:40}}>
                   <div style={{fontSize:60, marginBottom:18}}>🎉</div>
@@ -1255,7 +1301,7 @@ export default function HotPotsApp() {
                     <div className="form-intro-title">Step 1 of 2 — Random Raffle Piece</div>
                     <div className="form-intro-text">This piece will be randomly matched with another member. You won't know who you'll get — that's part of the fun!</div>
                   </div>
-                  <PieceForm ref={piece1Ref} label="Piece 1" typeLabel="Random Raffle" typeColor="#E8450A" />
+                  <PieceForm ref={piece1Ref} label="Piece 1" typeLabel="Random Raffle" typeColor="#E8450A" storageKey="draft_piece1" />
                   <button className="btn-primary" onClick={()=>setSubmitStep(2)}>Continue to Piece 2 →</button>
                 </>
               ) : (
@@ -1264,7 +1310,7 @@ export default function HotPotsApp() {
                     <div className="form-intro-title">Step 2 of 2 — Choice Piece</div>
                     <div className="form-intro-text">Submit your second piece, then rank the pieces you'd love to receive. The algorithm maximises matches using everyone's rank order — the more you rank, the better your odds!</div>
                   </div>
-                  <PieceForm ref={piece2Ref} label="Piece 2" typeLabel="Choice Match" typeColor="#D97706" />
+                  <PieceForm ref={piece2Ref} label="Piece 2" typeLabel="Choice Match" typeColor="#D97706" storageKey="draft_piece2" />
 
                   <div className="gallery-intro">
                     <div className="gallery-intro-title">🏆 Rank the Pieces You Want</div>
@@ -1361,15 +1407,30 @@ export default function HotPotsApp() {
               </div>
               {matches.length === 0 && <div style={{textAlign:"center",color:"#92400E",fontSize:13,padding:"32px 0"}}>No swaps yet — enter a round to get started!</div>}
               {matches.map(m=>(
-                <div className="match-card" key={m.id}>
-                  <div className="match-emoji">🤝</div>
-                  <div className="match-info">
-                    <div className="match-round">{m.round}</div>
-                    <div className="match-pieces">{m.myPiece} ↔ {m.partnerPiece}</div>
-                    <div className="match-partner">with {m.partner}</div>
+                <div className="match-card" key={m.id} style={{flexDirection:"column", gap:12}}>
+                  <div style={{display:"flex", alignItems:"center", gap:10}}>
+                    <div className="match-emoji">🤝</div>
+                    <div className="match-info" style={{flex:1}}>
+                      <div className="match-round">{m.round}</div>
+                      <div className="match-partner">with {m.partner}</div>
+                    </div>
+                    <div className={`match-type-badge ${m.type==="random"?"badge-random":"badge-choice"}`}>
+                      {m.type==="random"?"🎲 Raffle":"💛 Choice"}
+                    </div>
                   </div>
-                  <div className={`match-type-badge ${m.type==="random"?"badge-random":"badge-choice"}`}>
-                    {m.type==="random"?"🎲 Raffle":"💛 Choice"}
+                  <div style={{display:"flex", gap:8}}>
+                    {[{label:"Your piece", name:m.myPiece, url:m.myPhotoUrl}, {label:"Their piece", name:m.partnerPiece, url:m.partnerPhotoUrl}].map(p=>(
+                      <div key={p.label} style={{flex:1, borderRadius:12, overflow:"hidden", background:C.sand, border:`1px solid ${C.ochre}33`}}>
+                        {p.url
+                          ? <img src={p.url} alt={p.name} style={{width:"100%", aspectRatio:"1", objectFit:"cover", display:"block"}} />
+                          : <div style={{width:"100%", aspectRatio:"1", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28}}>🏺</div>
+                        }
+                        <div style={{padding:"6px 8px"}}>
+                          <div style={{fontSize:10, color:C.mahogany, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em"}}>{p.label}</div>
+                          <div style={{fontSize:12, color:C.bark, fontWeight:500, marginTop:2}}>{p.name || "—"}</div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -1402,7 +1463,11 @@ export default function HotPotsApp() {
                     <div className="thread-avatar">{convo.partner.initials}</div>
                     <div className="thread-info">
                       <div className="thread-name">{convo.partner.name}</div>
-                      <div className="thread-sub">{convo.round}</div>
+                      <div className="thread-sub">
+                        {convo.myPiece && convo.theirPiece
+                          ? `${convo.myPiece} ↔ ${convo.theirPiece}`
+                          : convo.round}
+                      </div>
                     </div>
                   </div>
 
