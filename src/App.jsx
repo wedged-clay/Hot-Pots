@@ -746,6 +746,8 @@ export default function HotPotsApp() {
   const [editName,       setEditName]       = useState("");
   const [editBio,        setEditBio]        = useState("");
   const [savingProfile,  setSavingProfile]  = useState(false);
+  const [studioCode,     setStudioCode]     = useState("");
+  const [linkCopied,     setLinkCopied]     = useState(false);
   const piece1Ref = useRef();
   const piece2Ref = useRef();
   const activeConvoRef = useRef(null); // mirrors activeConvo for Realtime closure
@@ -768,6 +770,9 @@ export default function HotPotsApp() {
       .eq("id", session.user.id)
       .single()
       .then(({ data }) => { if (data) setProfile(data); });
+    // Fetch active studio code for invite link
+    supabase.from("studio_codes").select("code").eq("active", true).limit(1).single()
+      .then(({ data }) => { if (data) setStudioCode(data.code); });
   }, [session]);
 
   // ── Fetch open round + gallery + matches when profile loads ──
@@ -1525,7 +1530,37 @@ export default function HotPotsApp() {
                 setEditingProfile(true);
               }}>Edit Profile</button>
 
-              <div style={{marginTop:20, background:"white", borderRadius:18, padding:18, border:"1px solid #D9770630"}}>
+              {studioCode && (
+                <div style={{marginTop:16, background:"white", borderRadius:18, padding:18, border:`1px solid ${C.ochre}44`}}>
+                  <div style={{fontFamily:"'Playfair Display',serif", fontSize:15, marginBottom:4, color:C.bark}}>Invite a Friend</div>
+                  <div style={{fontSize:12, color:C.mahogany, marginBottom:12, lineHeight:1.5}}>
+                    Share this link with someone from the studio — it takes them straight to signup with the code pre-filled.
+                  </div>
+                  <div style={{
+                    background: C.sand, borderRadius: 10, padding: "10px 14px",
+                    fontSize: 13, color: C.bark, fontFamily: "monospace",
+                    letterSpacing: "0.05em", marginBottom: 10, wordBreak: "break-all",
+                  }}>
+                    {`${window.location.origin}/?code=${studioCode}`}
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/?code=${studioCode}`);
+                      setLinkCopied(true);
+                      setTimeout(() => setLinkCopied(false), 2500);
+                    }}
+                    style={{
+                      width: "100%", padding: "10px 0", borderRadius: 12, border: "none",
+                      background: linkCopied ? C.mahogany : C.ember, color: "white",
+                      fontWeight: 600, cursor: "pointer", fontSize: 13, transition: "background 0.2s",
+                    }}
+                  >
+                    {linkCopied ? "✓ Link copied!" : "Copy invite link"}
+                  </button>
+                </div>
+              )}
+
+              <div style={{marginTop:16, background:"white", borderRadius:18, padding:18, border:"1px solid #D9770630"}}>
                 <div style={{fontFamily:"'Playfair Display',serif", fontSize:15, marginBottom:12, color:"#44200A"}}>🔒 Your Privacy</div>
                 <div style={{fontSize:12, color:"#92400E", lineHeight:1.6}}>
                   Supabase row-level security ensures your submissions are only visible to your matched partner — never to other members browsing the gallery. The studio admin sees round stats only.

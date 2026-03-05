@@ -342,6 +342,16 @@ export default function AuthScreens({ onAuthComplete }) {
   const [authError, setAuthError] = useState("");
   const [inviteCode, setInviteCode] = useState("");
 
+  // Pre-fill invite code and jump to signup if URL contains ?code=
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    if (code) {
+      setInviteCode(code.toUpperCase());
+      setScreen("signup");
+    }
+  }, []);
+
   const strength = pwdStrength(pwd);
   const initials = displayName.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2) || "?";
 
