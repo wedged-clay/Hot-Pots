@@ -213,26 +213,9 @@ serve(async (req: Request) => {
 
   if (matchErr) return json({ error: matchErr.message }, 500);
 
-  // ── Create conversations ──────────────────────────────────────────────────
-  // expires_at = round.closes_at + 30 days
-  const closeMs  = round.closes_at ? new Date(round.closes_at).getTime() : Date.now();
-  const expiresAt = new Date(closeMs + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-  const userOf = new Map<string, string>(); // submissionId → userId
-  for (const s of subs as Submission[]) userOf.set(s.id, s.user_id);
-
-  const convRows = (insertedMatches ?? []).map(m => ({
-    match_id:      m.id,
-    round_id,
-    participant_a: userOf.get(m.submission_a)!,
-    participant_b: userOf.get(m.submission_b)!,
-    expires_at:    expiresAt,
-  }));
-
-  const { error: convErr } = await supabase.from("conversations").insert(convRows);
-  if (convErr) return json({ error: convErr.message }, 500);
-
   // ── Mark submissions as matched ───────────────────────────────────────────
+  // Conversations are NOT created here — they are created when the admin
+  // clicks "Publish Results", keeping matches hidden from members during review.
   const matchedSubIds = (insertedMatches ?? []).flatMap(m => [m.submission_a, m.submission_b]);
   if (matchedSubIds.length > 0) {
     await supabase.from("submissions")

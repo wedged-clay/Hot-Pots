@@ -365,9 +365,34 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
       }
     }
     if (modal === "confirm-close") {
+      // 1. Fetch all matches for this round (not yet conversation-ified)
+      const { data: roundMatches } = await supabase
+        .from("matches")
+        .select("id, submission_a, submission_b, submissions!submission_a(user_id), sub_b:submissions!submission_b(user_id)")
+        .eq("round_id", activeRound.id);
+
+      // 2. Create conversations for every match that doesn't have one yet
+      const expiresAt = new Date(
+        (activeRound.closes_at ? new Date(activeRound.closes_at).getTime() : Date.now())
+        + 30 * 24 * 60 * 60 * 1000
+      ).toISOString();
+
+      const convRows = (roundMatches ?? []).map(m => ({
+        match_id:      m.id,
+        round_id:      activeRound.id,
+        participant_a: m.submissions?.user_id,
+        participant_b: m.sub_b?.user_id,
+        expires_at:    expiresAt,
+      }));
+
+      if (convRows.length > 0) {
+        await supabase.from("conversations").insert(convRows);
+      }
+
+      // 3. Close the round
       await supabase.from("raffle_rounds").update({ status: "complete" }).eq("id", activeRound.id);
       refreshRounds();
-      showToast("✅ Round closed");
+      showToast("✅ Results published — members can now see their matches");
     }
     if (modal === "new") {
       await supabase.from("raffle_rounds").insert({
