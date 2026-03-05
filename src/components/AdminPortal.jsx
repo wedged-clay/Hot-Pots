@@ -368,7 +368,7 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
       // 1. Fetch all matches for this round (not yet conversation-ified)
       const { data: roundMatches } = await supabase
         .from("matches")
-        .select("id, submission_a, submission_b, submissions!submission_a(user_id), sub_b:submissions!submission_b(user_id)")
+        .select("id, submission_a, submission_b, sub_a:submissions!submission_a(user_id), sub_b:submissions!submission_b(user_id)")
         .eq("round_id", activeRound.id);
 
       // 2. Create conversations for every match that doesn't have one yet
@@ -380,13 +380,13 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
       const convRows = (roundMatches ?? []).map(m => ({
         match_id:      m.id,
         round_id:      activeRound.id,
-        participant_a: m.submissions?.user_id,
+        participant_a: m.sub_a?.user_id,
         participant_b: m.sub_b?.user_id,
         expires_at:    expiresAt,
       }));
 
       if (convRows.length > 0) {
-        await supabase.from("conversations").insert(convRows);
+        await supabase.from("conversations").upsert(convRows, { onConflict: "match_id" });
       }
 
       // 3. Close the round
@@ -395,12 +395,13 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
       showToast("✅ Results published — members can now see their matches");
     }
     if (modal === "new") {
-      await supabase.from("raffle_rounds").insert({
+      const { error: insertErr } = await supabase.from("raffle_rounds").insert({
         title:     newRound.title,
         status:    "open",
         opens_at:  newRound.opens  || null,
         closes_at: newRound.closes || null,
       });
+      if (insertErr) { showToast(`❌ ${insertErr.message}`); return; }
       refreshRounds();
       showToast("🔥 New round opened!");
       setNewRound({ title:"", opens:"", closes:"" });
@@ -958,20 +959,26 @@ export default function AdminPortal({ role = "admin" }) {
     if (roundIds.length === 0) { setRounds([]); return; }
 
     const [{ data: subs }, { data: matchData }] = await Promise.all([
-      supabase.from("submissions").select("round_id").in("round_id", roundIds),
+      supabase.from("submissions").select("round_id, status").in("round_id", roundIds),
       supabase.from("matches").select("id, round_id").in("round_id", roundIds),
     ]);
 
-    const subCounts   = {};
-    (subs ?? []).forEach(s => { subCounts[s.round_id]   = (subCounts[s.round_id]   ?? 0) + 1; });
+    const subCounts     = {};
+    const unmatchedCounts = {};
+    (subs ?? []).forEach(s => {
+      subCounts[s.round_id] = (subCounts[s.round_id] ?? 0) + 1;
+      if (s.status === "pending") {
+        unmatchedCounts[s.round_id] = (unmatchedCounts[s.round_id] ?? 0) + 1;
+      }
+    });
     const matchCounts = {};
     (matchData ?? []).forEach(m => { matchCounts[m.round_id] = (matchCounts[m.round_id] ?? 0) + 1; });
 
     setRounds(data.map(r => ({
       ...r,
-      participants: subCounts[r.id]   ?? 0,
+      participants: subCounts[r.id]       ?? 0,
       matched:      (matchCounts[r.id] ?? 0) * 2,
-      unmatched:    Math.max(0, (subCounts[r.id] ?? 0) - (matchCounts[r.id] ?? 0) * 2),
+      unmatched:    unmatchedCounts[r.id] ?? 0,
     })));
   }
 

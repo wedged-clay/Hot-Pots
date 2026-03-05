@@ -120,6 +120,10 @@ export function usePWA() {
   // Call this when user opts in (e.g. after first match result)
   const enablePush = useCallback(async (userId) => {
     if (!("PushManager" in window) || !swRegistration) return false;
+    if (!VAPID_PUBLIC_KEY) {
+      console.warn("[PWA] VITE_VAPID_PUBLIC_KEY is not set — push notifications unavailable");
+      return false;
+    }
 
     try {
       const permission = await Notification.requestPermission();

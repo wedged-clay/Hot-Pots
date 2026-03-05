@@ -117,8 +117,8 @@ function matchPiece2(subs: Submission[]): { pairs: P2Pair[]; unmatched: string[]
     pairs.push({
       a:     p.a,
       b:     p.b,
-      rankA: p.rankA >= PENALTY ? 0 : p.rankA,
-      rankB: p.rankB >= PENALTY ? 0 : p.rankB,
+      rankA: p.rankA >= PENALTY ? null : p.rankA,
+      rankB: p.rankB >= PENALTY ? null : p.rankB,
     });
     taken.add(p.a);
     taken.add(p.b);
@@ -211,7 +211,11 @@ serve(async (req: Request) => {
     .insert(matchRows)
     .select("id, submission_a, submission_b");
 
-  if (matchErr) return json({ error: matchErr.message }, 500);
+  if (matchErr) {
+    // Revert round status so the admin can retry
+    await supabase.from("raffle_rounds").update({ status: "open" }).eq("id", round_id);
+    return json({ error: matchErr.message }, 500);
+  }
 
   // ── Mark submissions as matched ───────────────────────────────────────────
   // Conversations are NOT created here — they are created when the admin

@@ -739,6 +739,8 @@ export default function HotPotsApp() {
   const [activeConvo,   setActiveConvo]   = useState(urlParams.get("convo") || null);
   const [conversations, setConversations] = useState([]);
   const [draft,         setDraft]         = useState("");
+  const [isSending,     setIsSending]     = useState(false);
+  const [isSubmitting,  setIsSubmitting]  = useState(false);
   const [submitError,   setSubmitError]   = useState("");
   const piece1Ref = useRef();
   const piece2Ref = useRef();
@@ -955,24 +957,33 @@ export default function HotPotsApp() {
 
   // ── Piece submission ─────────────────────────────────────────
   const handleSubmitPieces = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     setSubmitError("");
     const p1 = piece1Ref.current?.getValue();
     const p2 = piece2Ref.current?.getValue();
     if (!round?.id || !profile?.id) return;
 
-    // Upload photos to Supabase Storage (bucket must be public in Supabase dashboard)
+    // Upload photos to Supabase Storage
     const uploadPhoto = async (file, prefix) => {
       if (!file) return null;
       const path = `${profile.id}/${prefix}_${Date.now()}`;
       const { data, error } = await supabase.storage.from("pottery-photos").upload(path, file);
-      if (error || !data) return null;
+      if (error || !data) throw new Error(`Photo upload failed: ${error?.message ?? "unknown error"}`);
       return supabase.storage.from("pottery-photos").getPublicUrl(data.path).data.publicUrl;
     };
 
-    const [p1Url, p2Url] = await Promise.all([
-      uploadPhoto(p1.photoFile, "p1"),
-      uploadPhoto(p2.photoFile, "p2"),
-    ]);
+    let p1Url, p2Url;
+    try {
+      [p1Url, p2Url] = await Promise.all([
+        uploadPhoto(p1.photoFile, "p1"),
+        uploadPhoto(p2.photoFile, "p2"),
+      ]);
+    } catch (uploadErr) {
+      setSubmitError(uploadErr.message);
+      setIsSubmitting(false);
+      return;
+    }
 
     const { error } = await supabase.from("submissions").insert({
       round_id:            round.id,
@@ -992,22 +1003,25 @@ export default function HotPotsApp() {
       piece_2_rankings:    rankings.map((id, idx) => ({ id, rank: idx + 1 })),
     });
 
-    if (error) { setSubmitError(error.message); return; }
+    if (error) { setSubmitError(error.message); setIsSubmitting(false); return; }
     setSubmitted(true);
+    setIsSubmitting(false);
   };
 
   // ── Messaging ────────────────────────────────────────────────
   const sendMessage = async (convoId) => {
-    if (!draft.trim()) return;
+    if (!draft.trim() || isSending) return;
     const body = draft.trim();
+    const tempId = "m" + Date.now();
     setDraft("");
+    setIsSending(true);
     // Optimistic update
     setConversations(prev => prev.map(c => {
       if (c.id !== convoId) return c;
       return {
         ...c,
         messages: [...c.messages, {
-          id:     "m" + Date.now(),
+          id:     tempId,
           sender: "me",
           body,
           time:   new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -1016,11 +1030,20 @@ export default function HotPotsApp() {
       };
     }));
     // Persist
-    await supabase.from("messages").insert({
+    const { error } = await supabase.from("messages").insert({
       conversation_id: convoId,
       sender_id:       profile.id,
       body,
     });
+    if (error) {
+      // Rollback optimistic update and restore draft
+      setConversations(prev => prev.map(c => {
+        if (c.id !== convoId) return c;
+        return { ...c, messages: c.messages.filter(m => m.id !== tempId) };
+      }));
+      setDraft(body);
+    }
+    setIsSending(false);
   };
 
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
@@ -1275,8 +1298,8 @@ export default function HotPotsApp() {
 
                   {submitError && <div style={{color:"#C1440E",fontSize:12,marginBottom:8}}>⚠ {submitError}</div>}
                   <button className="btn-primary"
-                    disabled={rankings.length===0}
-                    style={{opacity: rankings.length===0 ? 0.5 : 1, cursor: rankings.length===0?"not-allowed":"pointer"}}
+                    disabled={rankings.length===0 || isSubmitting}
+                    style={{opacity: (rankings.length===0 || isSubmitting) ? 0.5 : 1, cursor: (rankings.length===0 || isSubmitting)?"not-allowed":"pointer"}}
                     onClick={handleSubmitPieces}>
                     Submit Both Pieces 🏺
                   </button>

@@ -223,7 +223,7 @@ const styles = `
 
 // ── Image compression helper ──────────────────────────────────
 async function compressImage(source) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       const { naturalWidth: w, naturalHeight: h } = img;
@@ -235,6 +235,7 @@ async function compressImage(source) {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       canvas.toBlob(
         (blob) => {
+          if (!blob) { reject(new Error("Failed to encode image")); return; }
           const file = new File([blob], "pottery-photo.jpg", { type: "image/jpeg" });
           const url  = URL.createObjectURL(blob);
           resolve({ file, url });
@@ -243,11 +244,13 @@ async function compressImage(source) {
         JPEG_QUALITY
       );
     };
+    img.onerror = () => reject(new Error("Failed to load image"));
     if (typeof source === "string") {
       img.src = source;
     } else {
       const reader = new FileReader();
       reader.onload = (e) => { img.src = e.target.result; };
+      reader.onerror = () => reject(new Error("Failed to read file"));
       reader.readAsDataURL(source);
     }
   });
@@ -359,13 +362,17 @@ export default function CameraCapture({ onCapture, onClear, existingUrl, label =
     const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
     stopCamera();
 
-    const { file, url } = await compressImage(dataUrl);
-    setPreviewUrl(url);
-    setPhase("review");
-
-    // Keep compressed file ready for review confirmation
-    canvasRef._pendingFile = file;
-    canvasRef._pendingUrl  = url;
+    try {
+      const { file, url } = await compressImage(dataUrl);
+      setPreviewUrl(url);
+      setPhase("review");
+      // Keep compressed file ready for review confirmation
+      canvasRef._pendingFile = file;
+      canvasRef._pendingUrl  = url;
+    } catch {
+      setErrorMsg("Failed to process photo — please try again.");
+      setPhase("error");
+    }
   }, [facingMode, stopCamera]);
 
   // ── Confirm captured photo ────────────────────────────────────
@@ -396,11 +403,16 @@ export default function CameraCapture({ onCapture, onClear, existingUrl, label =
   const handleFileChange = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const { file: compressed, url } = await compressImage(file);
-    canvasRef._pendingFile = compressed;
-    canvasRef._pendingUrl  = url;
-    setPreviewUrl(url);
-    setPhase("review");
+    try {
+      const { file: compressed, url } = await compressImage(file);
+      canvasRef._pendingFile = compressed;
+      canvasRef._pendingUrl  = url;
+      setPreviewUrl(url);
+      setPhase("review");
+    } catch {
+      setErrorMsg("Failed to process photo — please try again.");
+      setPhase("error");
+    }
     // Reset input so same file can be re-selected
     e.target.value = "";
   }, []);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../supabase/client";
 
 // ============================================================
@@ -346,6 +346,9 @@ export default function AuthScreens({ onAuthComplete }) {
   const initials = displayName.split(" ").map(w=>w[0]).join("").toUpperCase().slice(0,2) || "?";
 
   const clearError = () => setAuthError("");
+
+  // Clear password mismatch error whenever the user navigates to a different screen
+  useEffect(() => { setPwdMismatch(false); }, [screen]);
 
   // ── Auth handlers ────────────────────────────────────────────
 
