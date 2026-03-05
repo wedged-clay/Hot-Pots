@@ -353,8 +353,16 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
 
   const confirmAction = async () => {
     if (modal === "confirm-match") {
-      // Matching Edge Function — wired in Phase 8
-      showToast("🎲 Matching algorithm not yet configured");
+      showToast("🎲 Running matching algorithm…");
+      const { data, error } = await supabase.functions.invoke("run-matching", {
+        body: { round_id: activeRound.id },
+      });
+      if (error) {
+        showToast(`❌ ${error.message}`);
+      } else {
+        refreshRounds();
+        showToast(`✅ Done — ${data.piece1Pairs} random + ${data.piece2Pairs} choice pairs`);
+      }
     }
     if (modal === "confirm-close") {
       await supabase.from("raffle_rounds").update({ status: "complete" }).eq("id", activeRound.id);
