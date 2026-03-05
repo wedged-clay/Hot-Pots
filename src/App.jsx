@@ -4,6 +4,9 @@ import CameraCapture from "./components/CameraCapture";
 import AdminPortal from "./components/AdminPortal";
 import AuthScreens from "./components/auth-screens";
 import { usePWA } from "./hooks/usePWA";
+import { DndContext, closestCenter } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // ============================================================
 // DATA MODEL (Supabase / Postgres Schema) — Updated
@@ -736,6 +739,33 @@ const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor, s
 });
 
 
+// ─── Sortable rank row (for drag-to-reorder) ──────────────────
+function SortableRankRow({ id, idx, totalCount, p, onRemove, onUp, onDown }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div ref={setNodeRef} className="rank-row"
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}>
+      <div {...listeners} {...attributes}
+        style={{ cursor: "grab", padding: "0 6px 0 0", color: C.mahogany, fontSize: 18, touchAction: "none", userSelect: "none" }}>
+        ⠿
+      </div>
+      <div className={`rank-badge rank-${idx}`}>#{idx + 1}</div>
+      {p.photoUrl
+        ? <img src={p.photoUrl} alt={p.name} style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+        : <span className="rank-emoji">🏺</span>}
+      <div className="rank-info">
+        <div className="rank-name">{p.name}</div>
+        <div className="rank-sub">{p.maker} · {p.clay} · {p.method}</div>
+      </div>
+      <div className="rank-actions">
+        <button className="rank-btn" disabled={idx === 0} onClick={onUp}>↑</button>
+        <button className="rank-btn" disabled={idx === totalCount - 1} onClick={onDown}>↓</button>
+        <button className="rank-btn remove" onClick={onRemove}>✕</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ─────────────────────────────────────────────────
 export default function HotPotsApp() {
   // ── Read URL params first (stable between renders, safe to read unconditionally) ──
@@ -767,6 +797,7 @@ export default function HotPotsApp() {
   const [savingProfile,  setSavingProfile]  = useState(false);
   const [studioCode,     setStudioCode]     = useState("");
   const [linkCopied,     setLinkCopied]     = useState(false);
+  const [revealMatch,    setRevealMatch]    = useState(null);
   const piece1Ref = useRef();
   const piece2Ref = useRef();
   const activeConvoRef = useRef(null); // mirrors activeConvo for Realtime closure
@@ -838,7 +869,7 @@ export default function HotPotsApp() {
       .or(`submission_a.in.(select id from submissions where user_id='${profile.id}'),submission_b.in.(select id from submissions where user_id='${profile.id}')`)
       .then(({ data }) => {
         if (!data) return;
-        setMatches(data.map(m => {
+        const mapped = data.map(m => {
           const mine = m.sub_a?.user_id === profile.id ? m.sub_a : m.sub_b;
           const theirs = m.sub_a?.user_id === profile.id ? m.sub_b : m.sub_a;
           const isRandom = m.match_type === "random";
@@ -852,7 +883,13 @@ export default function HotPotsApp() {
             partnerPhotoUrl:  isRandom ? theirs?.piece_1_photo_url : theirs?.piece_2_photo_url,
             type:             m.match_type,
           };
-        }));
+        });
+        setMatches(mapped);
+        // Reveal the first match the user hasn't seen yet
+        const seenKey = `hotpots_seen_matches_${profile.id}`;
+        const seen = JSON.parse(localStorage.getItem(seenKey) || "[]");
+        const firstNew = mapped.find(m => !seen.includes(m.id));
+        if (firstNew) setRevealMatch(firstNew);
       });
   }, [profile]);
 
@@ -1057,6 +1094,14 @@ export default function HotPotsApp() {
       setEditingProfile(false);
     }
     setSavingProfile(false);
+  };
+
+  const dismissReveal = () => {
+    if (!revealMatch) return;
+    const seenKey = `hotpots_seen_matches_${profile.id}`;
+    const seen = JSON.parse(localStorage.getItem(seenKey) || "[]");
+    localStorage.setItem(seenKey, JSON.stringify([...seen, revealMatch.id]));
+    setRevealMatch(null);
   };
 
   // ── Messaging ────────────────────────────────────────────────
@@ -1323,33 +1368,35 @@ export default function HotPotsApp() {
                       <div className="rank-summary">
                         <span className="rank-summary-icon">🏆</span>
                         <div className="rank-summary-text">
-                          You've ranked <span className="rank-summary-count">{rankings.length} piece{rankings.length!==1?"s":""}</span>. Drag rows to reorder. The algorithm will try your top picks first.
+                          You've ranked <span className="rank-summary-count">{rankings.length} piece{rankings.length!==1?"s":""}</span>. Drag to reorder. The algorithm will try your top picks first.
                         </div>
                       </div>
-                      <div className="rank-list">
-                        {rankings.map((id, idx) => {
-                          const p = gallery.find(g=>g.id===id);
-                          if (!p) return null;
-                          return (
-                            <div className="rank-row" key={id}>
-                              <div className={`rank-badge rank-${idx}`}>#{idx+1}</div>
-                              <span className="rank-emoji">{p.img}</span>
-                              <div className="rank-info">
-                                <div className="rank-name">{p.name}</div>
-                                <div className="rank-sub">{p.maker} · {p.clay} · {p.method}</div>
-                              </div>
-                              <div className="rank-actions">
-                                <button className="rank-btn" disabled={idx===0}
-                                  onClick={()=>setRankings(r=>{ const a=[...r]; [a[idx-1],a[idx]]=[a[idx],a[idx-1]]; return a; })}>↑</button>
-                                <button className="rank-btn" disabled={idx===rankings.length-1}
-                                  onClick={()=>setRankings(r=>{ const a=[...r]; [a[idx+1],a[idx]]=[a[idx],a[idx+1]]; return a; })}>↓</button>
-                                <button className="rank-btn remove"
-                                  onClick={()=>setRankings(r=>r.filter(x=>x!==id))}>✕</button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                      <DndContext collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
+                        if (over && active.id !== over.id) {
+                          setRankings(r => {
+                            const oldIdx = r.indexOf(active.id);
+                            const newIdx = r.indexOf(over.id);
+                            return arrayMove(r, oldIdx, newIdx);
+                          });
+                        }
+                      }}>
+                        <SortableContext items={rankings} strategy={verticalListSortingStrategy}>
+                          <div className="rank-list">
+                            {rankings.map((id, idx) => {
+                              const p = gallery.find(g => g.id === id);
+                              if (!p) return null;
+                              return (
+                                <SortableRankRow
+                                  key={id} id={id} idx={idx} totalCount={rankings.length} p={p}
+                                  onRemove={() => setRankings(r => r.filter(x => x !== id))}
+                                  onUp={idx === 0 ? null : () => setRankings(r => { const a=[...r]; [a[idx-1],a[idx]]=[a[idx],a[idx-1]]; return a; })}
+                                  onDown={idx === rankings.length-1 ? null : () => setRankings(r => { const a=[...r]; [a[idx+1],a[idx]]=[a[idx],a[idx+1]]; return a; })}
+                                />
+                              );
+                            })}
+                          </div>
+                        </SortableContext>
+                      </DndContext>
                     </>
                   )}
 
@@ -1669,6 +1716,52 @@ export default function HotPotsApp() {
             </button>
           ))}
         </div>
+
+        {/* ── Match reveal overlay ── */}
+        {revealMatch && (
+          <div style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+            zIndex: 10001, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+          }} onClick={dismissReveal}>
+            <div style={{
+              background: C.sand, borderRadius: 24, padding: 32, width: "100%", maxWidth: 360,
+              textAlign: "center", boxShadow: "0 12px 48px rgba(0,0,0,0.35)",
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 56, marginBottom: 12, lineHeight: 1 }}>🏺</div>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: C.bark, marginBottom: 6 }}>
+                You have a new swap!
+              </div>
+              <div style={{ fontSize: 14, color: C.mahogany, marginBottom: 20 }}>
+                Matched with <strong>{revealMatch.partner}</strong>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 24 }}>
+                {[
+                  { label: "Your piece",   name: revealMatch.myPiece,      url: revealMatch.myPhotoUrl },
+                  { label: "Their piece",  name: revealMatch.partnerPiece,  url: revealMatch.partnerPhotoUrl },
+                ].map(p => (
+                  <div key={p.label} style={{ flex: 1, borderRadius: 12, overflow: "hidden", background: "white", border: `1px solid ${C.ochre}33` }}>
+                    {p.url
+                      ? <img src={p.url} alt={p.name} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
+                      : <div style={{ width: "100%", aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🏺</div>
+                    }
+                    <div style={{ padding: "6px 8px" }}>
+                      <div style={{ fontSize: 10, color: C.mahogany, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.label}</div>
+                      <div style={{ fontSize: 12, color: C.bark, fontWeight: 500, marginTop: 2 }}>{p.name || "—"}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => { dismissReveal(); setTab("messages"); }} style={{
+                width: "100%", padding: "13px 0", borderRadius: 14, border: "none",
+                background: C.ember, color: "white", fontWeight: 700, fontSize: 15, cursor: "pointer",
+                marginBottom: 10,
+              }}>Open Conversation 💬</button>
+              <button onClick={dismissReveal} style={{
+                background: "none", border: "none", color: C.mahogany, fontSize: 13, cursor: "pointer", padding: 6,
+              }}>Dismiss</button>
+            </div>
+          </div>
+        )}
 
         {/* ── Edit Profile modal ── */}
         {editingProfile && (

@@ -33,12 +33,26 @@
 //     $$
 //   );
 //
+// SCHEDULED ROUND CLOSING REMINDERS (pg_cron — runs every hour):
+//   SELECT cron.schedule(
+//     'hotpots-round-closing-soon',
+//     '0 * * * *',
+//     $$
+//       SELECT net.http_post(
+//         url     := 'https://<project>.supabase.co/functions/v1/push-notify',
+//         headers := '{"Content-Type":"application/json","x-supabase-webhook-secret":"<WEBHOOK_SECRET>"}',
+//         body    := '{"type":"round_closing_check"}'
+//       )
+//     $$
+//   );
+//
 // NOTIFICATION TYPES:
-//   new_message   — new message from a matched partner
-//   match_made    — raffle match assigned (both participants notified)
-//   round_open    — a new swap round opens (broadcast to all members)
-//   round_matched — matching complete, results ready
-//   expiry_warn   — conversation closing in 3 days
+//   new_message         — new message from a matched partner
+//   match_made          — raffle match assigned (both participants notified)
+//   round_open          — a new swap round opens (broadcast to all members)
+//   round_matched       — matching complete, results ready
+//   expiry_warn         — conversation closing in 3 days
+//   round_closing_soon  — round closes in 48h, sent to members who haven't submitted yet
 // ============================================================
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -101,6 +115,14 @@ function buildPayload(type: string, data: Record<string, string>) {
         body:  `Your conversation with ${data.partnerName} closes on ${data.expiresAt}. Don't forget to arrange your swap!`,
         type:  "expiry",
         url:   `/?tab=messages&convo=${data.conversationId}`,
+      };
+
+    case "round_closing_soon":
+      return {
+        title: `⏰ ${data.roundTitle} closes in 48 hours`,
+        body:  "You haven't submitted yet — don't miss the round! Tap to enter your pieces now.",
+        type:  "round",
+        url:   "/?tab=enter",
       };
 
     default:
@@ -277,6 +299,46 @@ async function handleExpiryCheck() {
   }
 }
 
+async function handleRoundClosingCheck() {
+  // Find open rounds that close within the next 48h
+  const now      = new Date();
+  const in48h    = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+  const { data: rounds } = await supabase
+    .from("raffle_rounds")
+    .select("id, title, closes_at")
+    .eq("status", "open")
+    .gt("closes_at",  now.toISOString())
+    .lte("closes_at", in48h.toISOString());
+
+  if (!rounds?.length) {
+    console.log("[push] No rounds closing in 48h");
+    return;
+  }
+
+  for (const round of rounds) {
+    // Find push-subscribed members who have NOT yet submitted for this round
+    const { data: submitted } = await supabase
+      .from("submissions")
+      .select("user_id")
+      .eq("round_id", round.id);
+
+    const submittedIds = new Set((submitted ?? []).map((s: any) => s.user_id));
+
+    const { data: subs } = await supabase
+      .from("push_subscriptions")
+      .select("user_id");
+
+    if (!subs?.length) continue;
+
+    const targets = subs.filter((s: any) => !submittedIds.has(s.user_id));
+    console.log(`[push] Round closing soon — notifying ${targets.length} non-submitters for "${round.title}"`);
+
+    const payload = buildPayload("round_closing_soon", { roundTitle: round.title });
+    await Promise.allSettled(targets.map((s: any) => sendToUser(s.user_id, payload)));
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // Main request handler
 // ─────────────────────────────────────────────────────────────
@@ -307,10 +369,9 @@ Deno.serve(async (req: Request) => {
       await handleRoundStatusChange(record, old_record);
     }
 
-    // ── Scheduled cron trigger ──
-    if (type === "expiry_check") {
-      await handleExpiryCheck();
-    }
+    // ── Scheduled cron triggers ──
+    if (type === "expiry_check")        await handleExpiryCheck();
+    if (type === "round_closing_check") await handleRoundClosingCheck();
 
     // ── Direct API call (e.g. from admin dashboard) ──
     if (body.notificationType) {
