@@ -742,6 +742,10 @@ export default function HotPotsApp() {
   const [isSending,     setIsSending]     = useState(false);
   const [isSubmitting,  setIsSubmitting]  = useState(false);
   const [submitError,   setSubmitError]   = useState("");
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editName,       setEditName]       = useState("");
+  const [editBio,        setEditBio]        = useState("");
+  const [savingProfile,  setSavingProfile]  = useState(false);
   const piece1Ref = useRef();
   const piece2Ref = useRef();
   const activeConvoRef = useRef(null); // mirrors activeConvo for Realtime closure
@@ -838,7 +842,7 @@ export default function HotPotsApp() {
           sub_b:submissions!submission_b(user_id, piece_1_name, profiles!user_id(id, display_name)),
           round:raffle_rounds!round_id(title)
         ),
-        messages(id, sender_id, body, sent_at)
+        messages(id, sender_id, body, sent_at, read_at)
       `)
       .then(({ data }) => {
         if (!data) return;
@@ -856,6 +860,7 @@ export default function HotPotsApp() {
               body:   m.body,
               time:   new Date(m.sent_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               date:   formatMsgDate(m.sent_at),
+              readAt: m.read_at ?? null,
             }));
           return {
             id:         c.id,
@@ -866,7 +871,7 @@ export default function HotPotsApp() {
             matchType:  match?.match_type ?? "random",
             expiresAt:  c.expires_at,
             messages:   msgs,
-            unreadCount: 0,
+            unreadCount: msgs.filter(m => m.sender === "them" && !m.readAt).length,
           };
         }));
       });
@@ -910,11 +915,14 @@ export default function HotPotsApp() {
               unreadCount: activeConvoRef.current === c.id ? c.unreadCount : c.unreadCount + 1,
             }
           ));
+          if (activeConvoRef.current === msg.conversation_id) {
+            markConversationRead(msg.conversation_id);
+          }
         }
       )
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [profile]);
+  }, [profile, markConversationRead]);
 
   // ── Buy Me a Coffee widget ───────────────────────────────────
   useEffect(() => {
@@ -1008,6 +1016,20 @@ export default function HotPotsApp() {
     setIsSubmitting(false);
   };
 
+  // ── Edit Profile ─────────────────────────────────────────────
+  const saveProfile = async () => {
+    if (!editName.trim()) return;
+    setSavingProfile(true);
+    const { error } = await supabase.from("profiles")
+      .update({ display_name: editName.trim(), bio: editBio.trim() })
+      .eq("id", profile.id);
+    if (!error) {
+      setProfile(p => ({ ...p, display_name: editName.trim(), bio: editBio.trim() }));
+      setEditingProfile(false);
+    }
+    setSavingProfile(false);
+  };
+
   // ── Messaging ────────────────────────────────────────────────
   const sendMessage = async (convoId) => {
     if (!draft.trim() || isSending) return;
@@ -1045,6 +1067,17 @@ export default function HotPotsApp() {
     }
     setIsSending(false);
   };
+
+  const markConversationRead = useCallback(async (convoId) => {
+    setConversations(prev => prev.map(c =>
+      c.id !== convoId ? c : { ...c, unreadCount: 0 }
+    ));
+    await supabase.from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .eq("conversation_id", convoId)
+      .neq("sender_id", profile.id)
+      .is("read_at", null);
+  }, [profile]);
 
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
 
@@ -1444,7 +1477,7 @@ export default function HotPotsApp() {
                   const lastMsg = c.messages[c.messages.length - 1];
                   const hasUnread = (c.unreadCount ?? 0) > 0;
                   return (
-                    <div key={c.id} className={`convo-card ${hasUnread?"unread":""}`} onClick={()=>{ setActiveConvo(c.id); setConversations(prev => prev.map(c2 => c2.id !== c.id ? c2 : { ...c2, unreadCount: 0 })); }}>
+                    <div key={c.id} className={`convo-card ${hasUnread?"unread":""}`} onClick={()=>{ setActiveConvo(c.id); markConversationRead(c.id); }}>
                       <div className="convo-avatar">{c.partner.initials}</div>
                       <div className="convo-info">
                         <div className="convo-name">{c.partner.name}</div>
@@ -1475,13 +1508,22 @@ export default function HotPotsApp() {
                 <div className="profile-avatar">{profileInitials}</div>
                 <div className="profile-name">{profile?.display_name ?? "…"}</div>
                 <div style={{fontSize:13, color:"#92400E"}}>Studio Member since {profile ? new Date(profile.created_at).getFullYear() : "…"}</div>
+                {profile?.bio && (
+                  <div style={{ fontSize: 13, color: C.bark, marginTop: 6, textAlign: "center", lineHeight: 1.5 }}>
+                    {profile.bio}
+                  </div>
+                )}
                 <div className="profile-stats">
                   <div className="stat"><div className="stat-num">{matches.length}</div><div className="stat-label">Swaps</div></div>
                   <div className="stat"><div className="stat-num">{profileStats.rounds}</div><div className="stat-label">Rounds</div></div>
                   <div className="stat"><div className="stat-num">{profileStats.piecesGiven}</div><div className="stat-label">Pieces Given</div></div>
                 </div>
               </div>
-              <button className="btn-secondary">Edit Profile</button>
+              <button className="btn-secondary" onClick={() => {
+                setEditName(profile?.display_name ?? "");
+                setEditBio(profile?.bio ?? "");
+                setEditingProfile(true);
+              }}>Edit Profile</button>
 
               <div style={{marginTop:20, background:"white", borderRadius:18, padding:18, border:"1px solid #D9770630"}}>
                 <div style={{fontFamily:"'Playfair Display',serif", fontSize:15, marginBottom:12, color:"#44200A"}}>🔒 Your Privacy</div>
@@ -1527,6 +1569,59 @@ export default function HotPotsApp() {
             </button>
           ))}
         </div>
+
+        {/* ── Edit Profile modal ── */}
+        {editingProfile && (
+          <div style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+            zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+          }} onClick={() => setEditingProfile(false)}>
+            <div style={{
+              background: C.sand, borderRadius: 20, padding: 24, width: "100%", maxWidth: 400,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: C.bark, marginBottom: 18 }}>
+                Edit Profile
+              </div>
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.bark, display: "block", marginBottom: 4 }}>
+                Display Name
+              </label>
+              <input
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                style={{
+                  width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.ochre}66`,
+                  fontSize: 14, background: "white", color: C.bark, marginBottom: 14, boxSizing: "border-box",
+                }}
+              />
+              <label style={{ fontSize: 12, fontWeight: 600, color: C.bark, display: "block", marginBottom: 4 }}>
+                Bio <span style={{ fontWeight: 400, color: C.mahogany }}>(optional)</span>
+              </label>
+              <textarea
+                value={editBio}
+                onChange={e => setEditBio(e.target.value)}
+                rows={3}
+                placeholder="Tell the studio a bit about yourself…"
+                style={{
+                  width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.ochre}66`,
+                  fontSize: 14, background: "white", color: C.bark, resize: "vertical",
+                  marginBottom: 20, boxSizing: "border-box", fontFamily: "inherit",
+                }}
+              />
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setEditingProfile(false)} style={{
+                  flex: 1, padding: "11px 0", borderRadius: 12, border: `1px solid ${C.ochre}44`,
+                  background: "white", color: C.bark, fontWeight: 600, cursor: "pointer", fontSize: 14,
+                }}>Cancel</button>
+                <button onClick={saveProfile} disabled={savingProfile || !editName.trim()} style={{
+                  flex: 2, padding: "11px 0", borderRadius: 12, border: "none",
+                  background: C.ember, color: "white", fontWeight: 600, cursor: "pointer", fontSize: 14,
+                  opacity: (savingProfile || !editName.trim()) ? 0.6 : 1,
+                }}>{savingProfile ? "Saving…" : "Save Changes"}</button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </>
