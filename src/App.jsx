@@ -798,6 +798,8 @@ export default function HotPotsApp() {
   const [studioCode,     setStudioCode]     = useState("");
   const [linkCopied,     setLinkCopied]     = useState(false);
   const [revealMatch,    setRevealMatch]    = useState(null);
+  const [avatarFile,     setAvatarFile]     = useState(null);
+  const [avatarPreview,  setAvatarPreview]  = useState(null);
   const piece1Ref = useRef();
   const piece2Ref = useRef();
   const activeConvoRef = useRef(null); // mirrors activeConvo for Realtime closure
@@ -1080,18 +1082,38 @@ export default function HotPotsApp() {
     piece2Ref.current?.clearDraft();
     setSubmitted(true);
     setIsSubmitting(false);
+    // Fire-and-forget confirmation email
+    supabase.functions.invoke("send-email", {
+      body: {
+        userId: profile.id,
+        type: "submission_confirmed",
+        data: { roundTitle: round?.title ?? "the current round", piece1Name: p1.name, piece2Name: p2.name, closesAt: round?.closes_at },
+      },
+    }).catch(() => {}); // non-blocking
   };
 
   // ── Edit Profile ─────────────────────────────────────────────
   const saveProfile = async () => {
     if (!editName.trim()) return;
     setSavingProfile(true);
-    const { error } = await supabase.from("profiles")
-      .update({ display_name: editName.trim(), bio: editBio.trim() })
-      .eq("id", profile.id);
+    let avatarUrl = profile.avatar_url ?? null;
+    if (avatarFile) {
+      const { error: upErr } = await supabase.storage
+        .from("avatars")
+        .upload(profile.id, avatarFile, { upsert: true, contentType: avatarFile.type });
+      if (!upErr) {
+        avatarUrl = supabase.storage.from("avatars").getPublicUrl(profile.id).data.publicUrl
+          + `?t=${Date.now()}`;
+      }
+    }
+    const updates = { display_name: editName.trim(), bio: editBio.trim() };
+    if (avatarUrl !== (profile.avatar_url ?? null)) updates.avatar_url = avatarUrl;
+    const { error } = await supabase.from("profiles").update(updates).eq("id", profile.id);
     if (!error) {
-      setProfile(p => ({ ...p, display_name: editName.trim(), bio: editBio.trim() }));
+      setProfile(p => ({ ...p, display_name: editName.trim(), bio: editBio.trim(), avatar_url: avatarUrl }));
       setEditingProfile(false);
+      setAvatarFile(null);
+      setAvatarPreview(null);
     }
     setSavingProfile(false);
   };
@@ -1216,7 +1238,11 @@ export default function HotPotsApp() {
             <img src={LOGO} alt="Hot—Pots logo" />
             <span className="wordmark-text">Hot—<em>Pots</em></span>
           </div>
-          <div className="avatar">{profileInitials}</div>
+          <div className="avatar" style={{ padding: 0, overflow: "hidden" }}>
+            {profile?.avatar_url
+              ? <img src={profile.avatar_url} alt={profileInitials} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : profileInitials}
+          </div>
         </div>
 
         {/* TABS */}
@@ -1622,7 +1648,11 @@ export default function HotPotsApp() {
           {tab==="profile" && (
             <>
               <div className="profile-header">
-                <div className="profile-avatar">{profileInitials}</div>
+                <div className="profile-avatar" style={{ padding: 0, overflow: "hidden" }}>
+                  {profile?.avatar_url
+                    ? <img src={profile.avatar_url} alt={profileInitials} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : profileInitials}
+                </div>
                 <div className="profile-name">{profile?.display_name ?? "…"}</div>
                 <div style={{fontSize:13, color:"#92400E"}}>Studio Member since {profile ? new Date(profile.created_at).getFullYear() : "…"}</div>
                 {profile?.bio && (
@@ -1639,6 +1669,8 @@ export default function HotPotsApp() {
               <button className="btn-secondary" onClick={() => {
                 setEditName(profile?.display_name ?? "");
                 setEditBio(profile?.bio ?? "");
+                setAvatarFile(null);
+                setAvatarPreview(null);
                 setEditingProfile(true);
               }}>Edit Profile</button>
 
@@ -1776,6 +1808,41 @@ export default function HotPotsApp() {
               <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: C.bark, marginBottom: 18 }}>
                 Edit Profile
               </div>
+
+              {/* Avatar picker */}
+              <div style={{ textAlign: "center", marginBottom: 20 }}>
+                <div
+                  onClick={() => document.getElementById("avatar-file-input").click()}
+                  style={{
+                    width: 72, height: 72, borderRadius: "50%", margin: "0 auto 8px",
+                    background: (avatarPreview || profile?.avatar_url)
+                      ? "none"
+                      : `linear-gradient(135deg, ${C.ember}, ${C.mahogany})`,
+                    overflow: "hidden", cursor: "pointer", position: "relative",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
+                  }}>
+                  {(avatarPreview || profile?.avatar_url)
+                    ? <img src={avatarPreview || profile.avatar_url} alt="avatar"
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span style={{ color: "white", fontSize: 22, fontWeight: 600 }}>{profileInitials}</span>
+                  }
+                  <div style={{
+                    position: "absolute", inset: 0, background: "rgba(0,0,0,0.3)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 18,
+                  }}>📷</div>
+                </div>
+                <input id="avatar-file-input" type="file" accept="image/*" style={{ display: "none" }}
+                  onChange={e => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    setAvatarFile(f);
+                    setAvatarPreview(URL.createObjectURL(f));
+                  }} />
+                <div style={{ fontSize: 11, color: C.mahogany }}>Tap to change photo</div>
+              </div>
+
               <label style={{ fontSize: 12, fontWeight: 600, color: C.bark, display: "block", marginBottom: 4 }}>
                 Display Name
               </label>

@@ -936,14 +936,115 @@ function MemberManagement({ isAdmin }) {
   );
 }
 
+// ── Stragglers — members who haven't submitted yet ────────────
+function Stragglers({ rounds }) {
+  const openRound = rounds.find(r => r.status === "open") ?? rounds[0] ?? null;
+  const [roundId,    setRoundId]    = useState(openRound?.id ?? null);
+  const [stragglers, setStragglers] = useState([]);
+  const [loading,    setLoading]    = useState(false);
+
+  useEffect(() => {
+    if (!roundId) return;
+    setLoading(true);
+    async function load() {
+      const [{ data: profiles }, { data: subs }] = await Promise.all([
+        supabase.from("profiles").select("id, display_name").neq("role", "admin"),
+        supabase.from("submissions").select("user_id").eq("round_id", roundId),
+      ]);
+      const submittedIds = new Set((subs ?? []).map(s => s.user_id));
+      setStragglers((profiles ?? []).filter(p => !submittedIds.has(p.id)));
+      setLoading(false);
+    }
+    load();
+  }, [roundId]);
+
+  useEffect(() => {
+    if (!roundId && rounds.length > 0) setRoundId(rounds[0].id);
+  }, [rounds]);
+
+  const round = rounds.find(r => r.id === roundId);
+
+  return (
+    <div className="adm-section">
+      <div className="adm-heading">Not Yet Submitted</div>
+      <div className="adm-subheading">Members who are signed up but haven't entered the selected round.</div>
+
+      {/* Round picker */}
+      {rounds.length > 0 && (
+        <select value={roundId ?? ""} onChange={e => setRoundId(e.target.value)}
+          style={{
+            width: "100%", padding: "9px 12px", borderRadius: 10,
+            border: `1px solid ${C.ochre}55`, background: "white",
+            color: C.bark, fontSize: 13, marginBottom: 16, cursor: "pointer",
+          }}>
+          {rounds.map(r => (
+            <option key={r.id} value={r.id}>{r.title} ({r.status})</option>
+          ))}
+        </select>
+      )}
+
+      {loading && <div style={{ textAlign: "center", color: C.mahogany, fontSize: 13, padding: "16px 0" }}>Loading…</div>}
+
+      {!loading && round && (
+        <div style={{
+          background: stragglers.length > 0 ? "#fff7ed" : "#f0fdf4",
+          border: `1.5px solid ${stragglers.length > 0 ? "#fbbf24" : "#86efac"}`,
+          borderRadius: 14, padding: "12px 14px", marginBottom: 12,
+        }}>
+          <div style={{ fontWeight: 600, fontSize: 13, color: stragglers.length > 0 ? C.bark : "#16a34a", marginBottom: 4 }}>
+            {stragglers.length > 0
+              ? `⚠️ ${stragglers.length} member${stragglers.length !== 1 ? "s" : ""} haven't submitted yet`
+              : "✅ Everyone has submitted!"}
+          </div>
+          {stragglers.length > 0 && (
+            <div style={{ fontSize: 12, color: C.mahogany }}>
+              Consider sending them a reminder before the round closes.
+            </div>
+          )}
+        </div>
+      )}
+
+      {!loading && stragglers.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {stragglers.map(s => (
+            <div key={s.id} style={{
+              background: "white", borderRadius: 12, padding: "10px 14px",
+              border: `1px solid ${C.ochre}33`, display: "flex", alignItems: "center", gap: 10,
+            }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                background: `linear-gradient(135deg, ${C.ember}, ${C.mahogany})`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "white", fontSize: 12, fontWeight: 600,
+              }}>
+                {toInitials(s.display_name)}
+              </div>
+              <div style={{ fontSize: 14, color: C.bark, fontWeight: 500 }}>
+                {s.display_name ?? "Unknown member"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!loading && stragglers.length === 0 && rounds.length === 0 && (
+        <div style={{ textAlign: "center", color: C.mahogany, fontSize: 13, padding: "24px 0" }}>
+          No rounds yet.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main AdminPortal component ────────────────────────────────
 export default function AdminPortal({ role = "admin" }) {
   const isAdmin  = role === "admin";
   const sections = [
-    { id:"rounds",  label:"🔥 Rounds"  },
-    { id:"matches", label:"🎲 Matches" },
-    { id:"stats",   label:"📊 Stats"   },
-    { id:"members", label:"👥 Members" },
+    { id:"rounds",    label:"🔥 Rounds"     },
+    { id:"matches",   label:"🎲 Matches"    },
+    { id:"stats",     label:"📊 Stats"      },
+    { id:"members",   label:"👥 Members"    },
+    { id:"stragglers",label:"⚠️ Stragglers" },
   ];
   const [section, setSection] = useState("rounds");
   const [rounds,  setRounds]  = useState([]);
@@ -1014,10 +1115,11 @@ export default function AdminPortal({ role = "admin" }) {
         </div>
 
         {/* Sections */}
-        {section === "rounds"  && <RoundManagement isAdmin={isAdmin} rounds={rounds} refreshRounds={fetchRounds} />}
-        {section === "matches" && <MatchOversight  isAdmin={isAdmin} rounds={rounds} />}
-        {section === "stats"   && <UsageStats rounds={rounds} />}
-        {section === "members" && <MemberManagement isAdmin={isAdmin} />}
+        {section === "rounds"    && <RoundManagement isAdmin={isAdmin} rounds={rounds} refreshRounds={fetchRounds} />}
+        {section === "matches"   && <MatchOversight  isAdmin={isAdmin} rounds={rounds} />}
+        {section === "stats"     && <UsageStats rounds={rounds} />}
+        {section === "members"   && <MemberManagement isAdmin={isAdmin} />}
+        {section === "stragglers"&& <Stragglers rounds={rounds} />}
       </div>
     </>
   );
