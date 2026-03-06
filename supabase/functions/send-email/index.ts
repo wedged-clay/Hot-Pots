@@ -95,6 +95,12 @@ Deno.serve(async (req: Request) => {
 
   const { userId, type, data } = body;
 
+  if (!userId || !type) {
+    return new Response(JSON.stringify({ error: "Missing required fields: userId, type" }), {
+      status: 400, headers: { "Content-Type": "application/json" },
+    });
+  }
+
   // Look up the user's email via the admin API
   const { data: userData, error: userErr } = await supabase.auth.admin.getUserById(userId);
   const email = userData?.user?.email;

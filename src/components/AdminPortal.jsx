@@ -938,10 +938,15 @@ function MemberManagement({ isAdmin }) {
 
 // ── Stragglers — members who haven't submitted yet ────────────
 function Stragglers({ rounds }) {
-  const openRound = rounds.find(r => r.status === "open") ?? rounds[0] ?? null;
-  const [roundId,    setRoundId]    = useState(openRound?.id ?? null);
+  const [roundId,    setRoundId]    = useState(null);
   const [stragglers, setStragglers] = useState([]);
   const [loading,    setLoading]    = useState(false);
+
+  // Pick the best default once rounds arrive; don't overwrite a manual selection
+  useEffect(() => {
+    if (rounds.length === 0) return;
+    setRoundId(prev => prev ?? (rounds.find(r => r.status === "open")?.id ?? rounds[0].id));
+  }, [rounds]);
 
   useEffect(() => {
     if (!roundId) return;
@@ -957,10 +962,6 @@ function Stragglers({ rounds }) {
     }
     load();
   }, [roundId]);
-
-  useEffect(() => {
-    if (!roundId && rounds.length > 0) setRoundId(rounds[0].id);
-  }, [rounds]);
 
   const round = rounds.find(r => r.id === roundId);
 

@@ -758,8 +758,8 @@ function SortableRankRow({ id, idx, totalCount, p, onRemove, onUp, onDown }) {
         <div className="rank-sub">{p.maker} · {p.clay} · {p.method}</div>
       </div>
       <div className="rank-actions">
-        <button className="rank-btn" disabled={idx === 0} onClick={onUp}>↑</button>
-        <button className="rank-btn" disabled={idx === totalCount - 1} onClick={onDown}>↓</button>
+        <button className="rank-btn" disabled={idx === 0} onClick={() => onUp?.()}>↑</button>
+        <button className="rank-btn" disabled={idx === totalCount - 1} onClick={() => onDown?.()}>↓</button>
         <button className="rank-btn remove" onClick={onRemove}>✕</button>
       </div>
     </div>
@@ -1036,7 +1036,7 @@ export default function HotPotsApp() {
     setSubmitError("");
     const p1 = piece1Ref.current?.getValue();
     const p2 = piece2Ref.current?.getValue();
-    if (!round?.id || !profile?.id) return;
+    if (!round?.id || !profile?.id || !p1 || !p2) { setIsSubmitting(false); return; }
 
     // Upload photos to Supabase Storage
     const uploadPhoto = async (file, prefix) => {
@@ -1101,25 +1101,31 @@ export default function HotPotsApp() {
       const { error: upErr } = await supabase.storage
         .from("avatars")
         .upload(profile.id, avatarFile, { upsert: true, contentType: avatarFile.type });
-      if (!upErr) {
-        avatarUrl = supabase.storage.from("avatars").getPublicUrl(profile.id).data.publicUrl
-          + `?t=${Date.now()}`;
+      if (upErr) {
+        setSavingProfile(false);
+        alert(`Photo upload failed: ${upErr.message}`);
+        return;
       }
+      avatarUrl = supabase.storage.from("avatars").getPublicUrl(profile.id).data.publicUrl
+        + `?t=${Date.now()}`;
     }
     const updates = { display_name: editName.trim(), bio: editBio.trim() };
     if (avatarUrl !== (profile.avatar_url ?? null)) updates.avatar_url = avatarUrl;
     const { error } = await supabase.from("profiles").update(updates).eq("id", profile.id);
-    if (!error) {
-      setProfile(p => ({ ...p, display_name: editName.trim(), bio: editBio.trim(), avatar_url: avatarUrl }));
-      setEditingProfile(false);
-      setAvatarFile(null);
-      setAvatarPreview(null);
+    if (error) {
+      setSavingProfile(false);
+      alert(`Save failed: ${error.message}`);
+      return;
     }
+    setProfile(p => ({ ...p, display_name: editName.trim(), bio: editBio.trim(), avatar_url: avatarUrl }));
+    setEditingProfile(false);
+    setAvatarFile(null);
+    setAvatarPreview(null);
     setSavingProfile(false);
   };
 
   const dismissReveal = () => {
-    if (!revealMatch) return;
+    if (!revealMatch || !profile?.id) return;
     const seenKey = `hotpots_seen_matches_${profile.id}`;
     const seen = JSON.parse(localStorage.getItem(seenKey) || "[]");
     localStorage.setItem(seenKey, JSON.stringify([...seen, revealMatch.id]));
@@ -1837,8 +1843,11 @@ export default function HotPotsApp() {
                   onChange={e => {
                     const f = e.target.files?.[0];
                     if (!f) return;
+                    setAvatarPreview(prev => {
+                      if (prev) URL.revokeObjectURL(prev);
+                      return URL.createObjectURL(f);
+                    });
                     setAvatarFile(f);
-                    setAvatarPreview(URL.createObjectURL(f));
                   }} />
                 <div style={{ fontSize: 11, color: C.mahogany }}>Tap to change photo</div>
               </div>
@@ -1869,7 +1878,12 @@ export default function HotPotsApp() {
                 }}
               />
               <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={() => setEditingProfile(false)} style={{
+                <button onClick={() => {
+                  if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+                  setAvatarPreview(null);
+                  setAvatarFile(null);
+                  setEditingProfile(false);
+                }} style={{
                   flex: 1, padding: "11px 0", borderRadius: 12, border: `1px solid ${C.ochre}44`,
                   background: "white", color: C.bark, fontWeight: 600, cursor: "pointer", fontSize: 14,
                 }}>Cancel</button>
