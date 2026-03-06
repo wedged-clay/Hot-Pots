@@ -3,6 +3,7 @@ import { supabase } from "./supabase/client";
 import CameraCapture from "./components/CameraCapture";
 import AdminPortal from "./components/AdminPortal";
 import AuthScreens from "./components/auth-screens";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { usePWA } from "./hooks/usePWA";
 import { DndContext, closestCenter } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
@@ -1268,6 +1269,7 @@ export default function HotPotsApp() {
         </div>
 
         {/* CONTENT */}
+        <ErrorBoundary label={`the ${tab} tab`}>
         <div className="content">
 
           {/* ── HOME ── */}
@@ -1726,6 +1728,8 @@ export default function HotPotsApp() {
           {tab==="admin" && ["admin","helper"].includes(profile?.role) && (
             <AdminPortal role={profile.role} />
           )}
+
+        </ErrorBoundary>
 
         {/* BOTTOM NAV */}
         <div className="bottom-nav">
