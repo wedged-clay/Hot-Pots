@@ -1,11 +1,11 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import CameraCapture from "./CameraCapture";
+import { useDraftPhoto } from "../hooks/useDraftPhoto";
 
 const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor, storageKey }, ref) {
   const saved = storageKey ? JSON.parse(localStorage.getItem(storageKey) || "{}") : {};
 
-  const [photoFile, setPhotoFile] = useState(null);
-  const [photoUrl,  setPhotoUrl]  = useState(null);
+  const { photoFile, photoUrl, savePhoto, clearPhoto } = useDraftPhoto(storageKey ? storageKey + "-photo" : null);
   const [name,        setName]        = useState(saved.name        ?? "");
   const [clayBody,    setClayBody]    = useState(saved.clayBody    ?? "");
   const [method,      setMethod]      = useState(saved.method      ?? "");
@@ -20,7 +20,7 @@ const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor, s
 
   useImperativeHandle(ref, () => ({
     getValue: () => ({ photoFile, name, clayBody, method, glaze, description }),
-    clearDraft: () => { if (storageKey) localStorage.removeItem(storageKey); },
+    clearDraft: () => { if (storageKey) localStorage.removeItem(storageKey); clearPhoto(); },
   }));
 
   return (
@@ -34,8 +34,8 @@ const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor, s
       <CameraCapture
         label={`${label} Photo`}
         existingUrl={photoUrl}
-        onCapture={(file, url) => { setPhotoFile(file); setPhotoUrl(url); }}
-        onClear={() => { setPhotoFile(null); setPhotoUrl(null); }}
+        onCapture={(file) => savePhoto(file)}
+        onClear={clearPhoto}
       />
       <div className="form-field">
         <label className="form-label">Piece Name</label>
