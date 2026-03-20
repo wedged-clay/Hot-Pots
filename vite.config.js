@@ -6,10 +6,10 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react":   ["react", "react-dom"],
-          "vendor-supabase": ["@supabase/supabase-js"],
-          "vendor-dnd":     ["@dnd-kit/core", "@dnd-kit/sortable", "@dnd-kit/utilities"],
+        manualChunks(id) {
+          if (id.includes("/node_modules/react") || id.includes("/node_modules/react-dom")) return "vendor-react";
+          if (id.includes("/node_modules/@supabase/")) return "vendor-supabase";
+          if (id.includes("/node_modules/@dnd-kit/"))  return "vendor-dnd";
         },
       },
     },
