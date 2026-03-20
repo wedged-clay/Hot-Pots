@@ -190,14 +190,23 @@ export default function HotPotsApp() {
         })));
       });
 
-    // Match history
-    supabase.from("matches")
-      .select(`id, match_type, matched_at,
-        sub_a:submissions!submission_a(user_id, piece_1_name, piece_2_name, piece_1_photo_url, piece_2_photo_url, profiles!user_id(display_name)),
-        sub_b:submissions!submission_b(user_id, piece_1_name, piece_2_name, piece_1_photo_url, piece_2_photo_url, profiles!user_id(display_name)),
-        raffle_rounds!round_id(title)`)
-      .or(`submission_a.in.(select id from submissions where user_id='${profile.id}'),submission_b.in.(select id from submissions where user_id='${profile.id}')`)
-      .then(({ data }) => {
+    // Match history — fetch user's submission IDs first, then query matches
+    supabase.from("submissions")
+      .select("id")
+      .eq("user_id", profile.id)
+      .then(({ data: userSubs }) => {
+        const subIds = (userSubs ?? []).map(s => s.id);
+        if (subIds.length === 0) { setMatches([]); return; }
+        return supabase.from("matches")
+          .select(`id, match_type, matched_at,
+            sub_a:submissions!submission_a(user_id, piece_1_name, piece_2_name, piece_1_photo_url, piece_2_photo_url, profiles!user_id(display_name)),
+            sub_b:submissions!submission_b(user_id, piece_1_name, piece_2_name, piece_1_photo_url, piece_2_photo_url, profiles!user_id(display_name)),
+            raffle_rounds!round_id(title)`)
+          .or(`submission_a.in.(${subIds.join(",")}),submission_b.in.(${subIds.join(",")})`);
+      })
+      .then(result => {
+        if (!result) return;
+        const { data } = result;
         if (!data) return;
         const mapped = data.map(m => {
           const mine = m.sub_a?.user_id === profile.id ? m.sub_a : m.sub_b;
@@ -577,7 +586,7 @@ export default function HotPotsApp() {
             { id:"profile", label:"Profile"   },
             ...(["admin","helper"].includes(profile?.role) ? [{ id:"admin", label:"⚙️ Admin" }] : []),
           ].map(t => (
-            <button key={t.id} className={`tab ${tab===t.id?"active":""}`} onClick={()=>{ setTab(t.id); if(t.id!=="messages") setActiveConvo(null); }}>
+            <button key={t.id} data-testid={`tab-${t.id}`} className={`tab ${tab===t.id?"active":""}`} onClick={()=>{ setTab(t.id); if(t.id!=="messages") setActiveConvo(null); }}>
               {t.label}
             </button>
           ))}
@@ -842,6 +851,7 @@ export default function HotPotsApp() {
             // ── Thread view ──
             if (activeConvo) {
               const convo = conversations.find(c=>c.id===activeConvo);
+              if (!convo) { setActiveConvo(null); return null; }
               const days = daysLeft(convo.expiresAt);
               const isExpired = days <= 0;
               const isUrgent = days <= 5 && days > 0;
@@ -1056,7 +1066,7 @@ export default function HotPotsApp() {
             {id:"profile", icon:"👤", label:"Profile"},
             ...(["admin","helper"].includes(profile?.role) ? [{id:"admin", icon:"⚙️", label:"Admin"}] : []),
           ].map(n=>(
-            <button key={n.id} className={`nav-btn ${tab===n.id?"active":""}`} onClick={()=>{ setTab(n.id); if(n.id!=="messages") setActiveConvo(null); }}>
+            <button key={n.id} data-testid={`tab-${n.id}`} className={`nav-btn ${tab===n.id?"active":""}`} onClick={()=>{ setTab(n.id); if(n.id!=="messages") setActiveConvo(null); }}>
               <span className="nav-icon" style={{ position:"relative", display:"inline-block" }}>
                 {n.icon}
                 {n.id==="messages" && totalUnread > 0 && (

@@ -93,7 +93,7 @@ export default class ErrorBoundary extends Component {
     const { label = "this section" } = this.props;
 
     return (
-      <div style={styles.wrap}>
+      <div data-testid="error-boundary" style={styles.wrap}>
         <div style={styles.card}>
           <div style={styles.emoji}>🏺</div>
           <div style={styles.heading}>Something cracked</div>

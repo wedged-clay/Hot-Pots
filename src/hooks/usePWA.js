@@ -13,6 +13,7 @@
 //   const { canInstall, installApp, updateAvailable, applyUpdate, isOnline } = usePWA();
 
 import { useState, useEffect, useCallback } from "react";
+import { supabase } from "../supabase/client";
 
 // Your Supabase project URL for push notification endpoint
 const PUSH_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/push-notify`;
@@ -138,9 +139,13 @@ export function usePWA() {
       });
 
       // Send subscription to Supabase Edge Function to store against user
+      const { data: { session } } = await supabase.auth.getSession();
       await fetch(PUSH_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ userId, subscription }),
       });
 
