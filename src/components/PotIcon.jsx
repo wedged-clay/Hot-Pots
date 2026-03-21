@@ -1,6 +1,4 @@
-// Hand-drawn style pottery pot SVG icon.
-// Shape: globular thrown-pot silhouette — wide round belly, constricted neck,
-// flared lip. All cubic bezier curves, no straight sides.
+// Tall vase SVG icon — narrow foot, dramatic hip flare, pinched waist, graceful neck.
 // Props: size (number, default 24), color (string, default "currentColor")
 export default function PotIcon({ size = 24, color = "currentColor", style, ...props }) {
   return (
@@ -13,30 +11,34 @@ export default function PotIcon({ size = 24, color = "currentColor", style, ...p
       style={style}
       {...props}
     >
-      {/* Body — traces left rim → neck constriction → wide belly → foot → mirror right */}
+      {/* Body — traces rim → neck → waist pinch → dramatic hip flare → narrow foot */}
       <path
-        d="M 14 11
-           C 15 13 16 15 16 18
-           C 10 21 4 26 4 32
-           C 4 38 10 43 18 43
-           L 30 43
-           C 38 43 44 38 44 32
-           C 44 26 38 21 32 18
-           C 32 15 33 13 34 11
-           C 29 8 19 8 14 11 Z"
+        d="M 14 8
+           C 14 5 34 5 34 8
+           C 34 11 31 14 31 17
+           C 30 20 29 21 29 23
+           C 29 29 43 30 43 36
+           C 43 41 37 44 30 45
+           L 18 45
+           C 11 44 5 41 5 36
+           C 5 30 19 29 19 23
+           C 19 21 18 20 17 17
+           C 17 14 14 11 14 8 Z"
         fill={color}
       />
-      {/* Rim lip — flares slightly wider than the neck, like a thrown edge */}
+      {/* Rim lip — flares slightly wider than the neck */}
       <path
-        d="M 11 11 C 16 7 32 7 37 11"
+        d="M 11 8 C 17 4 31 4 37 8"
         stroke={color}
         strokeWidth="3"
         strokeLinecap="round"
         fill="none"
       />
-      {/* Sheen — subtle curved highlight on the left belly */}
+      {/* Foot ring */}
+      <ellipse cx="24" cy="45" rx="7" ry="1.5" fill={color} opacity="0.45" />
+      {/* Sheen — curved highlight following the hip */}
       <path
-        d="M 9 25 C 8 29 8 34 11 39"
+        d="M 7 29 C 6 33 6 37 8 41"
         stroke="white"
         strokeWidth="2"
         strokeLinecap="round"
