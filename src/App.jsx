@@ -112,13 +112,14 @@ export default function HotPotsApp() {
 
   // ── ALL hooks before any early returns (Rules of Hooks) ──────
   const { session } = useAuth();
-  const [profile,       setProfile]       = useState(null);
-  const [round,         setRound]         = useState(null);
-  const [gallery,       setGallery]       = useState([]);
-  const [matches,       setMatches]       = useState([]);
+  const [profile,          setProfile]          = useState(null);
+  const [rounds,           setRounds]           = useState([]);
+  const [galleryByRound,   setGalleryByRound]   = useState({});
+  const [submittedRoundIds,setSubmittedRoundIds] = useState(new Set());
+  const [selectedRoundId,  setSelectedRoundId]  = useState(null);
+  const [matches,          setMatches]          = useState([]);
   const profileStats = useProfileStats(profile);
   const [tab,           setTab]           = useState(validTabs.includes(urlTab) ? urlTab : "home");
-  const [submitted,     setSubmitted]     = useState(false);
   const [rankings,      setRankings]      = useState([]);
   const [donateAmt,     setDonateAmt]     = useState("$3");
   const [submitStep,    setSubmitStep]    = useState(1);
@@ -156,39 +157,56 @@ export default function HotPotsApp() {
       .then(({ data }) => { if (data) setStudioCode(data.code); });
   }, [session]);
 
-  // ── Fetch open round + gallery + matches when profile loads ──
+  // ── Fetch active rounds + galleries + matches when profile loads ──
   useEffect(() => {
     if (!profile) return;
-    // Open round
+    // All non-draft rounds (open or matching)
     supabase.from("raffle_rounds")
       .select("id, title, status, closes_at, match_type")
-      .eq("status", "open")
+      .in("status", ["open", "matching"])
       .order("closes_at", { ascending: true })
-      .limit(1)
-      .maybeSingle()
-      .then(async ({ data: r }) => {
-        if (!r) { setRound(null); return; }
-        // Count participants (submissions) for this round
-        const { count } = await supabase.from("submissions")
-          .select("id", { count: "exact", head: true })
-          .eq("round_id", r.id);
-        setRound({ ...r, participants: count ?? 0 });
+      .then(async ({ data: roundRows }) => {
+        if (!roundRows || roundRows.length === 0) { setRounds([]); return; }
 
-        // Gallery: other members' pieces for this round (used in ranking rounds)
-        const { data: subs } = await supabase.from("submissions")
-          .select("id, piece_1_name, piece_1_photo_url, piece_1_glaze, piece_1_clay_body, piece_1_method, profiles!user_id(display_name)")
-          .eq("round_id", r.id)
-          .neq("user_id", profile.id)
-          .not("piece_1_name", "is", null);
-        setGallery((subs ?? []).map(s => ({
-          id:     s.id,
-          name:   s.piece_1_name,
-          maker:  s.profiles?.display_name ?? "Member",
-          glaze:  s.piece_1_glaze ?? "",
-          clay:   s.piece_1_clay_body ?? "",
-          method: s.piece_1_method ?? "",
-          photoUrl: s.piece_1_photo_url,
-        })));
+        // For each round: get participant count + check if current user submitted
+        const enriched = await Promise.all(roundRows.map(async r => {
+          const [{ count }, { data: mySubmission }] = await Promise.all([
+            supabase.from("submissions").select("id", { count: "exact", head: true }).eq("round_id", r.id),
+            supabase.from("submissions").select("id").eq("round_id", r.id).eq("user_id", profile.id).maybeSingle(),
+          ]);
+          return { ...r, participants: count ?? 0, mySubmissionId: mySubmission?.id ?? null };
+        }));
+
+        setRounds(enriched);
+        setSubmittedRoundIds(new Set(enriched.filter(r => r.mySubmissionId).map(r => r.id)));
+
+        // Auto-select first open round the user hasn't entered
+        const firstEnterable = enriched.find(r => r.status === "open" && !r.mySubmissionId);
+        setSelectedRoundId(prev => prev ?? firstEnterable?.id ?? enriched[0]?.id ?? null);
+
+        // For each open ranking round, fetch the gallery (other members' pieces)
+        const galleryUpdates = {};
+        await Promise.all(
+          enriched
+            .filter(r => r.status === "open" && r.match_type === "ranking")
+            .map(async r => {
+              const { data: subs } = await supabase.from("submissions")
+                .select("id, piece_1_name, piece_1_photo_url, piece_1_glaze, piece_1_clay_body, piece_1_method, profiles!user_id(display_name)")
+                .eq("round_id", r.id)
+                .neq("user_id", profile.id)
+                .not("piece_1_name", "is", null);
+              galleryUpdates[r.id] = (subs ?? []).map(s => ({
+                id:     s.id,
+                name:   s.piece_1_name,
+                maker:  s.profiles?.display_name ?? "Member",
+                glaze:  s.piece_1_glaze ?? "",
+                clay:   s.piece_1_clay_body ?? "",
+                method: s.piece_1_method ?? "",
+                photoUrl: s.piece_1_photo_url,
+              }));
+            })
+        );
+        setGalleryByRound(galleryUpdates);
       });
 
     // Match history — fetch user's submission IDs first, then query matches
@@ -363,8 +381,11 @@ export default function HotPotsApp() {
   const profileInitials = profile?.display_name
     ? profile.display_name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2)
     : "?";
-  const progress = round ? Math.min(((round.participants ?? 0) / 20) * 100, 100) : 0;
-
+  // ── Derived helpers ───────────────────────────────────────────
+  const selectedRound = rounds.find(r => r.id === selectedRoundId) ?? null;
+  const gallery = selectedRoundId ? (galleryByRound[selectedRoundId] ?? []) : [];
+  // Rounds the user can still enter (open + not yet submitted)
+  const enterableRounds = rounds.filter(r => r.status === "open" && !submittedRoundIds.has(r.id));
 
   // ── Piece submission ─────────────────────────────────────────
   const handleSubmitPieces = async () => {
@@ -372,7 +393,7 @@ export default function HotPotsApp() {
     setIsSubmitting(true);
     setSubmitError("");
     const p1 = piece1Ref.current?.getValue();
-    if (!round?.id || !profile?.id || !p1) { setIsSubmitting(false); return; }
+    if (!selectedRound?.id || !profile?.id || !p1) { setIsSubmitting(false); return; }
 
     // Upload photo to Supabase Storage
     const uploadPhoto = async (file, prefix) => {
@@ -393,7 +414,7 @@ export default function HotPotsApp() {
     }
 
     const { error } = await supabase.from("submissions").insert({
-      round_id:            round.id,
+      round_id:            selectedRound.id,
       user_id:             profile.id,
       piece_1_name:        p1.name,
       piece_1_photo_url:   p1Url,
@@ -401,21 +422,26 @@ export default function HotPotsApp() {
       piece_1_method:      p1.method || null,
       piece_1_glaze:       p1.glaze,
       piece_1_description: p1.description,
-      piece_2_rankings:    round.match_type === "ranking"
+      piece_2_rankings:    selectedRound.match_type === "ranking"
                              ? rankings.map((id, idx) => ({ id, rank: idx + 1 }))
                              : [],
     });
 
     if (error) { setSubmitError(error.message); setIsSubmitting(false); return; }
     piece1Ref.current?.clearDraft();
-    setSubmitted(true);
+    setSubmittedRoundIds(prev => new Set([...prev, selectedRound.id]));
+    setRounds(prev => prev.map(r => r.id === selectedRound.id ? { ...r, mySubmissionId: "submitted" } : r));
     setIsSubmitting(false);
+    setSubmitStep(1);
+    // Auto-advance selectedRound to next enterable round after submission
+    const nextEnterable = rounds.find(r => r.status === "open" && !submittedRoundIds.has(r.id) && r.id !== selectedRound.id);
+    if (nextEnterable) setSelectedRoundId(nextEnterable.id);
     // Fire-and-forget confirmation email
     supabase.functions.invoke("send-email", {
       body: {
         userId: profile.id,
         type: "submission_confirmed",
-        data: { roundTitle: round?.title ?? "the current round", pieceName: p1.name, closesAt: round?.closes_at },
+        data: { roundTitle: selectedRound?.title ?? "the current round", pieceName: p1.name, closesAt: selectedRound?.closes_at },
       },
     }).catch(() => {}); // non-blocking
   };
@@ -591,69 +617,125 @@ export default function HotPotsApp() {
           {/* ── HOME ── */}
           {tab==="home" && (
             <>
-              <div className="round-banner">
-                <PotIcon size={64} color="white" style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", opacity: 0.12, pointerEvents: "none" }} />
-                <div className="round-status">● Open Now</div>
-                <div className="round-title">{round?.title ?? "Loading…"}</div>
-                {(() => {
-                  const cd = round ? formatCountdown(round.closes_at) : null;
-                  return (
-                    <div className="round-meta" style={cd?.urgent ? { color: "#C1440E", fontWeight: 600 } : {}}>
-                      {cd ? cd.label : "…"}
-                      {" · "}{round ? new Date(round.closes_at).toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : ""}
-                    </div>
-                  );
-                })()}
-                <div className="round-progress">
-                  <div className="round-progress-fill" style={{width:`${progress}%`}} />
+              {/* Active rounds dashboard */}
+              {rounds.length === 0 ? (
+                <div style={{textAlign:"center", padding:"40px 0", color:"#92400E", fontSize:13}}>
+                  No rounds are open right now — check back soon <PotIcon size={14} color={C.mist} style={{ verticalAlign: "middle", marginLeft: 4 }} />
                 </div>
-                <div className="round-progress-label">{round?.participants ?? 0} participants so far</div>
-                <button className="btn-primary" onClick={()=>setTab("enter")}>Enter This Round →</button>
-              </div>
-
-              <div className="section-header">
-                <div className="section-title">How It Works</div>
-              </div>
-              <div className="how-card">
-                {(round?.match_type === "ranking" ? [
-                  { n:1, t:"Submit Your Piece", d:"Register the pottery piece you're willing to trade. Add a photo, clay body, method, and description." },
-                  { n:2, t:"Rank the Gallery", d:"Browse other members' pieces and rank the ones you'd love to receive. The more you rank, the better your odds!" },
-                  { n:3, t:"Matched by Choice", d:"The algorithm pairs people based on mutual rankings — maximising everyone's satisfaction." },
-                  { n:4, t:"Meet & Exchange", d:"After matching, arrange your swap at the studio. Admire each other's work!" },
-                ] : [
-                  { n:1, t:"Submit Your Piece", d:"Register the pottery piece you're willing to trade. Add a photo, clay body, method, and description." },
-                  { n:2, t:"Random Draw", d:"After the round closes, all pieces are randomly shuffled and paired. A fun surprise — you won't know who you'll get!" },
-                  { n:3, t:"Meet & Exchange", d:"After matching, arrange your swap at the studio. Admire each other's work!" },
-                ]).map(s=>(
-                  <div className="step" key={s.n}>
-                    <div className="step-num">{s.n}</div>
-                    <div>
-                      <div className="step-title">{s.t}</div>
-                      <div className="step-desc">{s.d}</div>
-                    </div>
+              ) : (
+                <>
+                  <div className="section-header" style={{marginTop:20}}>
+                    <div className="section-title">Active Rounds</div>
+                    <span style={{fontSize:12, color:"#92400E"}}>{rounds.length} running</span>
                   </div>
-                ))}
-              </div>
+                  {rounds.map(r => {
+                    const cd = formatCountdown(r.closes_at);
+                    const isSubmitted = submittedRoundIds.has(r.id);
+                    const prog = Math.min(((r.participants ?? 0) / 20) * 100, 100);
+                    const isMatching = r.status === "matching";
+                    return (
+                      <div className="round-card" key={r.id}>
+                        <PotIcon size={56} color="white" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", opacity: 0.1, pointerEvents: "none" }} />
+                        <div style={{display:"flex", gap:8, alignItems:"center", marginBottom:10, flexWrap:"wrap"}}>
+                          <div className={`round-status-badge ${isMatching ? "badge-matching" : "badge-open"}`}>
+                            {isMatching ? "⏳ Matching" : "● Open"}
+                          </div>
+                          <div className="round-type-chip">
+                            {r.match_type === "ranking" ? "🏆 Ranking" : "🎲 Random"}
+                          </div>
+                        </div>
+                        <div className="round-title">{r.title}</div>
+                        {!isMatching && (
+                          <div className="round-meta" style={cd?.urgent ? {color:"#C1440E", fontWeight:600} : {}}>
+                            {cd ? cd.label : "…"}{" · "}{new Date(r.closes_at).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}
+                          </div>
+                        )}
+                        {isMatching && (
+                          <div className="round-meta">Results coming soon — matching in progress</div>
+                        )}
+                        {!isMatching && (
+                          <>
+                            <div className="round-progress">
+                              <div className="round-progress-fill" style={{width:`${prog}%`}} />
+                            </div>
+                            <div className="round-progress-label">{r.participants ?? 0} participants so far</div>
+                          </>
+                        )}
+                        {isSubmitted ? (
+                          <div className="round-submitted-badge">✓ Submitted — you're in!</div>
+                        ) : isMatching ? (
+                          <div className="round-submitted-badge" style={{background:"rgba(217,119,6,0.15)", color:"#D97706"}}>⏳ Awaiting Results</div>
+                        ) : (
+                          <button className="btn-primary" onClick={()=>{ setSelectedRoundId(r.id); setSubmitStep(1); setRankings([]); setTab("enter"); }}>Enter This Round →</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
 
-              <div className="section-header">
-                <div className="section-title">Recent Pieces</div>
-                <span className="section-link">See all</span>
-              </div>
-              <div className="gallery-grid">
-                {gallery.slice(0,4).map(p=>(
-                  <div className="gallery-card" key={p.id}>
-                    {p.photoUrl
-                      ? <img src={p.photoUrl} alt={p.name} style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:6}} />
-                      : <PotIcon size={32} color={C.mahogany} style={{ display: "block", margin: "0 auto 8px" }} />}
-                    <div className="gallery-name">{p.name}</div>
-                    <div className="gallery-maker">{p.maker}</div>
-                    <div className="gallery-tags">
-                      <span className="gallery-tag">{p.clay}</span>
-                      <span className="gallery-tag">{p.method}</span>
+              {/* How It Works — keyed to first open round's match_type, or generic */}
+              {(() => {
+                const firstOpen = rounds.find(r => r.status === "open");
+                const mt = firstOpen?.match_type ?? "random";
+                return (
+                  <>
+                    <div className="section-header">
+                      <div className="section-title">How It Works</div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                    <div className="how-card">
+                      {(mt === "ranking" ? [
+                        { n:1, t:"Submit Your Piece", d:"Register the pottery piece you're willing to trade. Add a photo, clay body, method, and description." },
+                        { n:2, t:"Rank the Gallery", d:"Browse other members' pieces and rank the ones you'd love to receive. The more you rank, the better your odds!" },
+                        { n:3, t:"Matched by Choice", d:"The algorithm pairs people based on mutual rankings — maximising everyone's satisfaction." },
+                        { n:4, t:"Meet & Exchange", d:"After matching, arrange your swap at the studio. Admire each other's work!" },
+                      ] : [
+                        { n:1, t:"Submit Your Piece", d:"Register the pottery piece you're willing to trade. Add a photo, clay body, method, and description." },
+                        { n:2, t:"Random Draw", d:"After the round closes, all pieces are randomly shuffled and paired. A fun surprise — you won't know who you'll get!" },
+                        { n:3, t:"Meet & Exchange", d:"After matching, arrange your swap at the studio. Admire each other's work!" },
+                      ]).map(s=>(
+                        <div className="step" key={s.n}>
+                          <div className="step-num">{s.n}</div>
+                          <div>
+                            <div className="step-title">{s.t}</div>
+                            <div className="step-desc">{s.d}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Recent Pieces — from the first open ranking round */}
+              {(() => {
+                const firstRankingRound = rounds.find(r => r.status === "open" && r.match_type === "ranking");
+                const recentGallery = firstRankingRound ? (galleryByRound[firstRankingRound.id] ?? []) : [];
+                if (recentGallery.length === 0) return null;
+                return (
+                  <>
+                    <div className="section-header">
+                      <div className="section-title">Recent Pieces</div>
+                      <span className="section-link">See all</span>
+                    </div>
+                    <div className="gallery-grid">
+                      {recentGallery.slice(0,4).map(p=>(
+                        <div className="gallery-card" key={p.id}>
+                          {p.photoUrl
+                            ? <img src={p.photoUrl} alt={p.name} style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:6}} />
+                            : <PotIcon size={32} color={C.mahogany} style={{ display: "block", margin: "0 auto 8px" }} />}
+                          <div className="gallery-name">{p.name}</div>
+                          <div className="gallery-maker">{p.maker}</div>
+                          <div className="gallery-tags">
+                            <span className="gallery-tag">{p.clay}</span>
+                            <span className="gallery-tag">{p.method}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* ── SUPPORT ── */}
               <div className="donate-hero" style={{marginTop:28}}>
@@ -677,146 +759,194 @@ export default function HotPotsApp() {
           {/* ── ENTER RAFFLE ── */}
           {tab==="enter" && (
             <div style={{paddingTop:20}}>
-              {round?.closes_at && (() => {
-                const cd = formatCountdown(round.closes_at);
-                return (
-                  <div style={{
-                    textAlign: "center", padding: "8px 16px", borderRadius: 10, marginBottom: 16,
-                    background: cd.urgent ? "#FEF2F2" : C.sand,
-                    border: `1px solid ${cd.urgent ? "#FCA5A5" : C.ochre + "44"}`,
-                    fontSize: 13, fontWeight: 600,
-                    color: cd.urgent ? "#C1440E" : C.bark,
-                  }}>
-                    {cd.label}
+              {/* No enterable rounds */}
+              {enterableRounds.length === 0 && rounds.length === 0 && (
+                <div style={{textAlign:"center", paddingTop:40, color:"#92400E", fontSize:13}}>
+                  No rounds are open right now. Check back soon!
+                </div>
+              )}
+              {enterableRounds.length === 0 && rounds.length > 0 && (
+                <div style={{textAlign:"center", paddingTop:40}}>
+                  <div style={{fontSize:48, marginBottom:16}}>🎉</div>
+                  <div style={{fontFamily:"'Playfair Display',serif", fontSize:20, marginBottom:10}}>You're entered in all open rounds!</div>
+                  <div style={{fontSize:13, color:"#92400E", lineHeight:1.6, marginBottom:24}}>
+                    You've submitted to every active round. Results will appear in My Swaps once matching is complete.
                   </div>
-                );
-              })()}
-              {submitted ? (
+                  <button className="btn-secondary" onClick={()=>setTab("home")}>Back to Home</button>
+                </div>
+              )}
+
+              {/* Round selector — shown when multiple enterable rounds exist */}
+              {enterableRounds.length > 1 && !selectedRound && (
+                <>
+                  <div style={{fontFamily:"'Playfair Display',serif", fontStyle:"italic", fontSize:18, marginBottom:16, color:C.bark}}>Choose a round to enter</div>
+                  {enterableRounds.map(r => (
+                    <button key={r.id} className="round-selector-card" onClick={()=>{ setSelectedRoundId(r.id); setSubmitStep(1); setRankings([]); }}>
+                      <div style={{display:"flex", gap:8, alignItems:"center", marginBottom:6}}>
+                        <span className="round-type-chip">{r.match_type === "ranking" ? "🏆 Ranking" : "🎲 Random"}</span>
+                      </div>
+                      <div style={{fontFamily:"'Playfair Display',serif", fontStyle:"italic", fontSize:16, color:"white", marginBottom:4}}>{r.title}</div>
+                      <div style={{fontSize:12, opacity:0.7, color:"white"}}>
+                        Closes {new Date(r.closes_at).toLocaleDateString("en-US",{month:"long",day:"numeric"})} · {r.participants ?? 0} in so far
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {/* Form — shown when a round is selected and the user hasn't submitted to it yet */}
+              {selectedRound && !submittedRoundIds.has(selectedRound.id) && (
+                <>
+                  {/* Sticky round context bar */}
+                  <div className="round-context-bar">
+                    <span style={{fontWeight:600, color:C.bark}}>Entering:</span>{" "}
+                    <span style={{fontStyle:"italic", color:C.mahogany}}>{selectedRound.title}</span>{" · "}
+                    <span>{selectedRound.match_type === "ranking" ? "🏆 Ranking" : "🎲 Random"}</span>
+                    {selectedRound.closes_at && (() => {
+                      const cd = formatCountdown(selectedRound.closes_at);
+                      return <span style={{color: cd.urgent ? "#C1440E" : C.bark, fontWeight: cd.urgent ? 600 : 400}}>{" · "}{cd.label}</span>;
+                    })()}
+                    {enterableRounds.length > 1 && (
+                      <button onClick={()=>setSelectedRoundId(null)} style={{marginLeft:"auto", background:"none", border:"none", color:C.ember, fontSize:12, cursor:"pointer", fontWeight:600}}>Change</button>
+                    )}
+                  </div>
+
+                  {selectedRound.match_type === "ranking" && submitStep === 2 ? (
+                    <>
+                      <div className="form-intro">
+                        <div className="form-intro-title">Step 2 of 2 — Rank the Pieces You Want</div>
+                        <div className="form-intro-text">Browse the gallery and rank the pieces you'd love to receive. The algorithm maximises matches using everyone's rank order — the more you rank, the better your odds!</div>
+                      </div>
+
+                      <div className="gallery-intro">
+                        <div className="gallery-intro-title">🏆 Your Rankings</div>
+                        <div className="gallery-intro-text">Tap "Add to ranking" on pieces you'd be happy to receive. Drag to reorder. Rank 1 = your top pick.</div>
+                      </div>
+
+                      {/* Ranked list */}
+                      {rankings.length > 0 && (
+                        <>
+                          <div className="rank-summary">
+                            <span className="rank-summary-icon">🏆</span>
+                            <div className="rank-summary-text">
+                              You've ranked <span className="rank-summary-count">{rankings.length} piece{rankings.length!==1?"s":""}</span>. Drag to reorder. The algorithm will try your top picks first.
+                            </div>
+                          </div>
+                          <DndContext collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
+                            if (over && active.id !== over.id) {
+                              setRankings(r => {
+                                const oldIdx = r.indexOf(active.id);
+                                const newIdx = r.indexOf(over.id);
+                                return arrayMove(r, oldIdx, newIdx);
+                              });
+                            }
+                          }}>
+                            <SortableContext items={rankings} strategy={verticalListSortingStrategy}>
+                              <div className="rank-list">
+                                {rankings.map((id, idx) => {
+                                  const p = gallery.find(g => g.id === id);
+                                  if (!p) return null;
+                                  return (
+                                    <SortableRankRow
+                                      key={id} id={id} idx={idx} totalCount={rankings.length} p={p}
+                                      onRemove={() => setRankings(r => r.filter(x => x !== id))}
+                                      onUp={idx === 0 ? null : () => setRankings(r => { const a=[...r]; [a[idx-1],a[idx]]=[a[idx],a[idx-1]]; return a; })}
+                                      onDown={idx === rankings.length-1 ? null : () => setRankings(r => { const a=[...r]; [a[idx+1],a[idx]]=[a[idx],a[idx+1]]; return a; })}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            </SortableContext>
+                          </DndContext>
+                        </>
+                      )}
+
+                      {/* Unranked pool */}
+                      {gallery.filter(p=>!rankings.includes(p.id)).length > 0 && (
+                        <>
+                          <div style={{fontSize:12, color:"#92400E", marginBottom:10, fontWeight:500}}>
+                            {rankings.length > 0 ? "Add more pieces to your ranking:" : "Tap a piece to add it to your ranking:"}
+                          </div>
+                          <div className="gallery-grid" style={{marginBottom:20}}>
+                            {gallery.filter(p=>!rankings.includes(p.id)).map(p=>(
+                              <div className="gallery-card" key={p.id}>
+                                {p.photoUrl
+                                  ? <img src={p.photoUrl} alt={p.name} style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:6}} />
+                                  : <PotIcon size={32} color={C.mahogany} style={{ display: "block", margin: "0 auto 8px" }} />}
+                                <div className="gallery-name">{p.name}</div>
+                                <div className="gallery-maker">{p.maker}</div>
+                                <div className="gallery-tags">
+                                  <span className="gallery-tag">{p.clay}</span>
+                                  <span className="gallery-tag">{p.method}</span>
+                                </div>
+                                <button className="add-rank-btn" onClick={()=>setRankings(r=>[...r, p.id])}>
+                                  + Add to ranking
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      {submitError && <div style={{color:"#C1440E",fontSize:12,marginBottom:8}}>⚠ {submitError}</div>}
+                      <button className="btn-primary"
+                        disabled={rankings.length===0 || isSubmitting}
+                        style={{opacity: (rankings.length===0 || isSubmitting) ? 0.5 : 1, cursor: (rankings.length===0 || isSubmitting)?"not-allowed":"pointer"}}
+                        onClick={handleSubmitPieces}>
+                        Submit <PotIcon size={16} color="currentColor" style={{ verticalAlign: "middle", marginLeft: 4 }} />
+                      </button>
+                      {rankings.length===0 && (
+                        <div style={{textAlign:"center", fontSize:12, color:"#92400E", marginTop:8}}>
+                          Rank at least one piece to continue
+                        </div>
+                      )}
+                      <button className="btn-secondary" onClick={()=>setSubmitStep(1)}>← Back to Your Piece</button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="form-intro">
+                        {selectedRound.match_type === "ranking"
+                          ? <>
+                              <div className="form-intro-title">Step 1 of 2 — Your Piece</div>
+                              <div className="form-intro-text">Submit the piece you're offering. Next, you'll rank other members' pieces to find your best match.</div>
+                            </>
+                          : <>
+                              <div className="form-intro-title">Submit Your Piece</div>
+                              <div className="form-intro-text">This piece will be randomly matched with another member's — a fun surprise!</div>
+                            </>
+                        }
+                      </div>
+                      <PieceForm ref={piece1Ref} label="Your Piece" typeLabel={selectedRound.match_type === "ranking" ? "Ranking Round" : "Random Raffle"} typeColor={selectedRound.match_type === "ranking" ? "#D97706" : "#E8450A"} storageKey={`draft_piece1_${selectedRound.id}`} />
+                      {submitError && <div style={{color:"#C1440E",fontSize:12,marginBottom:8}}>⚠ {submitError}</div>}
+                      {selectedRound.match_type === "ranking"
+                        ? <button className="btn-primary" onClick={()=>setSubmitStep(2)}>Continue to Ranking →</button>
+                        : <button className="btn-primary" disabled={isSubmitting} style={{opacity:isSubmitting?0.5:1}} onClick={handleSubmitPieces}>
+                            Submit Piece <PotIcon size={16} color="currentColor" style={{ verticalAlign: "middle", marginLeft: 4 }} />
+                          </button>
+                      }
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Already submitted to this round — show confirmation */}
+              {selectedRound && submittedRoundIds.has(selectedRound.id) && (
                 <div style={{textAlign:"center", paddingTop:40}}>
                   <div style={{fontSize:60, marginBottom:18}}>🎉</div>
                   <div style={{fontFamily:"'Playfair Display',serif", fontSize:22, marginBottom:10}}>You're in!</div>
                   <div style={{fontSize:14, color:"#92400E", lineHeight:1.6, marginBottom:28}}>
-                    {round?.match_type === "ranking"
-                      ? <>Your piece is submitted for <strong>{round?.title}</strong>. The ranking algorithm will find your best match across the studio.</>
-                      : <>Your piece is submitted for <strong>{round?.title}</strong>. You'll be randomly matched on {round ? new Date(round.closes_at).toLocaleDateString("en-US",{month:"long",day:"numeric"}) : "…"}.</>
+                    {selectedRound.match_type === "ranking"
+                      ? <>Your piece is submitted for <strong>{selectedRound.title}</strong>. The ranking algorithm will find your best match across the studio.</>
+                      : <>Your piece is submitted for <strong>{selectedRound.title}</strong>. You'll be randomly matched on {new Date(selectedRound.closes_at).toLocaleDateString("en-US",{month:"long",day:"numeric"})}.</>
                     }
                   </div>
-                  <button className="btn-secondary" onClick={()=>{setSubmitted(false);setSubmitStep(1);setTab("home");}}>Back to Home</button>
+                  {enterableRounds.length > 0 && (
+                    <button className="btn-primary" onClick={()=>{ setSelectedRoundId(enterableRounds[0].id); setSubmitStep(1); setRankings([]); }}>
+                      Enter Another Round →
+                    </button>
+                  )}
+                  <button className="btn-secondary" onClick={()=>setTab("home")}>Back to Home</button>
                 </div>
-              ) : round?.match_type === "ranking" && submitStep === 2 ? (
-                <>
-                  <div className="form-intro">
-                    <div className="form-intro-title">Step 2 of 2 — Rank the Pieces You Want</div>
-                    <div className="form-intro-text">Browse the gallery and rank the pieces you'd love to receive. The algorithm maximises matches using everyone's rank order — the more you rank, the better your odds!</div>
-                  </div>
-
-                  <div className="gallery-intro">
-                    <div className="gallery-intro-title">🏆 Your Rankings</div>
-                    <div className="gallery-intro-text">Tap "Add to ranking" on pieces you'd be happy to receive. Drag to reorder. Rank 1 = your top pick.</div>
-                  </div>
-
-                  {/* Ranked list */}
-                  {rankings.length > 0 && (
-                    <>
-                      <div className="rank-summary">
-                        <span className="rank-summary-icon">🏆</span>
-                        <div className="rank-summary-text">
-                          You've ranked <span className="rank-summary-count">{rankings.length} piece{rankings.length!==1?"s":""}</span>. Drag to reorder. The algorithm will try your top picks first.
-                        </div>
-                      </div>
-                      <DndContext collisionDetection={closestCenter} onDragEnd={({ active, over }) => {
-                        if (over && active.id !== over.id) {
-                          setRankings(r => {
-                            const oldIdx = r.indexOf(active.id);
-                            const newIdx = r.indexOf(over.id);
-                            return arrayMove(r, oldIdx, newIdx);
-                          });
-                        }
-                      }}>
-                        <SortableContext items={rankings} strategy={verticalListSortingStrategy}>
-                          <div className="rank-list">
-                            {rankings.map((id, idx) => {
-                              const p = gallery.find(g => g.id === id);
-                              if (!p) return null;
-                              return (
-                                <SortableRankRow
-                                  key={id} id={id} idx={idx} totalCount={rankings.length} p={p}
-                                  onRemove={() => setRankings(r => r.filter(x => x !== id))}
-                                  onUp={idx === 0 ? null : () => setRankings(r => { const a=[...r]; [a[idx-1],a[idx]]=[a[idx],a[idx-1]]; return a; })}
-                                  onDown={idx === rankings.length-1 ? null : () => setRankings(r => { const a=[...r]; [a[idx+1],a[idx]]=[a[idx],a[idx+1]]; return a; })}
-                                />
-                              );
-                            })}
-                          </div>
-                        </SortableContext>
-                      </DndContext>
-                    </>
-                  )}
-
-                  {/* Unranked pool */}
-                  {gallery.filter(p=>!rankings.includes(p.id)).length > 0 && (
-                    <>
-                      <div style={{fontSize:12, color:"#92400E", marginBottom:10, fontWeight:500}}>
-                        {rankings.length > 0 ? "Add more pieces to your ranking:" : "Tap a piece to add it to your ranking:"}
-                      </div>
-                      <div className="gallery-grid" style={{marginBottom:20}}>
-                        {gallery.filter(p=>!rankings.includes(p.id)).map(p=>(
-                          <div className="gallery-card" key={p.id}>
-                            {p.photoUrl
-                              ? <img src={p.photoUrl} alt={p.name} style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:6}} />
-                              : <PotIcon size={32} color={C.mahogany} style={{ display: "block", margin: "0 auto 8px" }} />}
-                            <div className="gallery-name">{p.name}</div>
-                            <div className="gallery-maker">{p.maker}</div>
-                            <div className="gallery-tags">
-                              <span className="gallery-tag">{p.clay}</span>
-                              <span className="gallery-tag">{p.method}</span>
-                            </div>
-                            <button className="add-rank-btn" onClick={()=>setRankings(r=>[...r, p.id])}>
-                              + Add to ranking
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
-
-                  {submitError && <div style={{color:"#C1440E",fontSize:12,marginBottom:8}}>⚠ {submitError}</div>}
-                  <button className="btn-primary"
-                    disabled={rankings.length===0 || isSubmitting}
-                    style={{opacity: (rankings.length===0 || isSubmitting) ? 0.5 : 1, cursor: (rankings.length===0 || isSubmitting)?"not-allowed":"pointer"}}
-                    onClick={handleSubmitPieces}>
-                    Submit <PotIcon size={16} color="currentColor" style={{ verticalAlign: "middle", marginLeft: 4 }} />
-                  </button>
-                  {rankings.length===0 && (
-                    <div style={{textAlign:"center", fontSize:12, color:"#92400E", marginTop:8}}>
-                      Rank at least one piece to continue
-                    </div>
-                  )}
-                  <button className="btn-secondary" onClick={()=>setSubmitStep(1)}>← Back to Your Piece</button>
-                </>
-              ) : (
-                <>
-                  <div className="form-intro">
-                    {round?.match_type === "ranking"
-                      ? <>
-                          <div className="form-intro-title">Step 1 of 2 — Your Piece</div>
-                          <div className="form-intro-text">Submit the piece you're offering. Next, you'll rank other members' pieces to find your best match.</div>
-                        </>
-                      : <>
-                          <div className="form-intro-title">Submit Your Piece</div>
-                          <div className="form-intro-text">This piece will be randomly matched with another member's — a fun surprise!</div>
-                        </>
-                    }
-                  </div>
-                  <PieceForm ref={piece1Ref} label="Your Piece" typeLabel={round?.match_type === "ranking" ? "Ranking Round" : "Random Raffle"} typeColor={round?.match_type === "ranking" ? "#D97706" : "#E8450A"} storageKey="draft_piece1" />
-                  {submitError && <div style={{color:"#C1440E",fontSize:12,marginBottom:8}}>⚠ {submitError}</div>}
-                  {round?.match_type === "ranking"
-                    ? <button className="btn-primary" onClick={()=>setSubmitStep(2)}>Continue to Ranking →</button>
-                    : <button className="btn-primary" disabled={isSubmitting} style={{opacity:isSubmitting?0.5:1}} onClick={handleSubmitPieces}>
-                        Submit Piece <PotIcon size={16} color="currentColor" style={{ verticalAlign: "middle", marginLeft: 4 }} />
-                      </button>
-                  }
-                </>
               )}
             </div>
           )}
@@ -829,34 +959,46 @@ export default function HotPotsApp() {
                 <span className="section-link">{matches.length} completed</span>
               </div>
               {matches.length === 0 && <div style={{textAlign:"center",color:"#92400E",fontSize:13,padding:"32px 0"}}>No swaps yet — enter a round to get started!</div>}
-              {matches.map(m=>(
-                <div className="match-card" key={m.id} style={{flexDirection:"column", gap:12}}>
-                  <div style={{display:"flex", alignItems:"center", gap:10}}>
-                    <div className="match-emoji">🤝</div>
-                    <div className="match-info" style={{flex:1}}>
-                      <div className="match-round">{m.round}</div>
-                      <div className="match-partner">with {m.partner}</div>
-                    </div>
-                    <div className={`match-type-badge ${m.type==="random"?"badge-random":"badge-choice"}`}>
-                      {m.type==="random"?"🎲 Raffle":"💛 Choice"}
-                    </div>
-                  </div>
-                  <div style={{display:"flex", gap:8}}>
-                    {[{label:"Your piece", name:m.myPiece, url:m.myPhotoUrl}, {label:"Their piece", name:m.partnerPiece, url:m.partnerPhotoUrl}].map(p=>(
-                      <div key={p.label} style={{flex:1, borderRadius:12, overflow:"hidden", background:C.sand, border:`1px solid ${C.ochre}33`}}>
-                        {p.url
-                          ? <img src={p.url} alt={p.name} style={{width:"100%", aspectRatio:"1", objectFit:"cover", display:"block"}} />
-                          : <div style={{width:"100%", aspectRatio:"1", display:"flex", alignItems:"center", justifyContent:"center"}}><PotIcon size={28} color={C.mahogany} /></div>
-                        }
-                        <div style={{padding:"6px 8px"}}>
-                          <div style={{fontSize:10, color:C.mahogany, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em"}}>{p.label}</div>
-                          <div style={{fontSize:12, color:C.bark, fontWeight:500, marginTop:2}}>{p.name || "—"}</div>
+              {/* Group matches by round when there are multiple rounds represented */}
+              {(() => {
+                const roundNames = [...new Set(matches.map(m => m.round))];
+                const showGroupHeaders = roundNames.length > 1;
+                return roundNames.map(roundName => (
+                  <div key={roundName}>
+                    {showGroupHeaders && (
+                      <div className="swap-group-header">{roundName}</div>
+                    )}
+                    {matches.filter(m => m.round === roundName).map(m => (
+                      <div className="match-card" key={m.id} style={{flexDirection:"column", gap:12}}>
+                        <div style={{display:"flex", alignItems:"center", gap:10}}>
+                          <div className="match-emoji">🤝</div>
+                          <div className="match-info" style={{flex:1}}>
+                            <div className="match-round">{m.round}</div>
+                            <div className="match-partner">with {m.partner}</div>
+                          </div>
+                          <div className={`match-type-badge ${m.type==="random"?"badge-random":"badge-choice"}`}>
+                            {m.type==="random"?"🎲 Raffle":"💛 Choice"}
+                          </div>
+                        </div>
+                        <div style={{display:"flex", gap:8}}>
+                          {[{label:"Your piece", name:m.myPiece, url:m.myPhotoUrl}, {label:"Their piece", name:m.partnerPiece, url:m.partnerPhotoUrl}].map(p=>(
+                            <div key={p.label} style={{flex:1, borderRadius:12, overflow:"hidden", background:C.sand, border:`1px solid ${C.ochre}33`}}>
+                              {p.url
+                                ? <img src={p.url} alt={p.name} style={{width:"100%", aspectRatio:"1", objectFit:"cover", display:"block"}} />
+                                : <div style={{width:"100%", aspectRatio:"1", display:"flex", alignItems:"center", justifyContent:"center"}}><PotIcon size={28} color={C.mahogany} /></div>
+                              }
+                              <div style={{padding:"6px 8px"}}>
+                                <div style={{fontSize:10, color:C.mahogany, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em"}}>{p.label}</div>
+                                <div style={{fontSize:12, color:C.bark, fontWeight:500, marginTop:2}}>{p.name || "—"}</div>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              ))}
+                ));
+              })()}
               <div style={{textAlign:"center", padding:"28px 0", color:"#92400E", fontSize:13}}>
                 More swaps appear after each round closes <PotIcon size={14} color={C.mist} style={{ verticalAlign: "middle", marginLeft: 4 }} />
               </div>
