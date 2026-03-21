@@ -13,7 +13,6 @@
 //   const { canInstall, installApp, updateAvailable, applyUpdate, isOnline } = usePWA();
 
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "../supabase/client";
 
 // Your Supabase project URL for push notification endpoint
 const PUSH_ENDPOINT = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/push-notify`;
