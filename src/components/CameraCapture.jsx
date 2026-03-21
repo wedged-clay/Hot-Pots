@@ -35,7 +35,7 @@ const styles = `
   .cam-trigger {
     width: 100%; height: 160px;
     border: 2px dashed #D9770660; border-radius: 16px;
-    background: #FEF3C7;
+    background: #FDF8F0;
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
     gap: 8px; cursor: pointer;
@@ -209,7 +209,7 @@ const styles = `
 
   /* ── Error state ── */
   .cam-error {
-    background: #FDE8D8; border: 1.5px solid #E8450A44;
+    background: #FFF5EF; border: 1.5px solid #E8450A44;
     border-radius: 14px; padding: 14px 16px;
     display: flex; gap: 10px; align-items: flex-start;
     margin-bottom: 10px;
