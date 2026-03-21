@@ -1,6 +1,5 @@
 // Nine alternative pot icon designs — all share a tall slender base with a curvy middle.
 // Props: size (number, default 24), color (string, default "currentColor")
-import PotIcon from "./PotIcon";
 
 // 1: Classic Amphora — wide dramatic belly at mid-height, pinched neck, flared rim
 export function PotIcon1({ size = 24, color = "currentColor", style, ...props }) {
