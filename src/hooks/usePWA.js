@@ -138,9 +138,14 @@ export function usePWA() {
       });
 
       // Send subscription to Supabase Edge Function to store against user
+      const { supabase } = await import("../supabase/client");
+      const { data: { session } } = await supabase.auth.getSession();
       await fetch(PUSH_ENDPOINT, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(session?.access_token ? { "Authorization": `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({ userId, subscription }),
       });
 
