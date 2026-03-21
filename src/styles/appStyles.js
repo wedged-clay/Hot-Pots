@@ -140,6 +140,63 @@ export const styles = `
   }
   .round-progress-label { font-family: 'Fredoka One', sans-serif; font-size: 13px; font-weight: 500; opacity: 0.75; }
 
+  /* ── ROUND CARDS (multi-round dashboard) ── */
+  .round-card {
+    margin: 0 0 14px;
+    background: linear-gradient(140deg, #7C2D12 0%, #44200A 100%);
+    border-radius: 20px; padding: 20px;
+    color: white; position: relative; overflow: hidden;
+    box-shadow: 0 8px 24px rgba(68,32,10,0.25), 0 2px 6px rgba(68,32,10,0.12);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .round-status-badge {
+    display: inline-block;
+    font-family: 'Caveat', cursive; font-size: 13px; font-weight: 700;
+    padding: 2px 10px; border-radius: 20px;
+    letter-spacing: 0.3px;
+  }
+  .badge-open { background: #E8450A; color: white; }
+  .badge-matching { background: rgba(217,119,6,0.8); color: white; }
+  .round-type-chip {
+    display: inline-block;
+    font-size: 11px; font-weight: 600;
+    padding: 2px 9px; border-radius: 20px;
+    background: rgba(255,255,255,0.15); color: rgba(255,255,255,0.9);
+  }
+  .round-submitted-badge {
+    margin-top: 14px; padding: 9px 14px; border-radius: 12px;
+    background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.9);
+    font-size: 13px; font-weight: 600; text-align: center;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+
+  /* ── ROUND CONTEXT BAR (Enter Raffle tab) ── */
+  .round-context-bar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+    padding: 9px 14px; border-radius: 12px; margin-bottom: 16px;
+    background: #FDF8F0; border: 1px solid rgba(180,83,9,0.2);
+    font-size: 12px; color: #92400E; line-height: 1.4;
+  }
+
+  /* ── ROUND SELECTOR CARDS (Enter Raffle tab) ── */
+  .round-selector-card {
+    display: block; width: 100%; text-align: left;
+    background: linear-gradient(140deg, #7C2D12 0%, #44200A 100%);
+    border-radius: 16px; padding: 16px; margin-bottom: 10px;
+    border: 1.5px solid rgba(255,255,255,0.08); cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 14px rgba(68,32,10,0.2);
+  }
+  .round-selector-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(68,32,10,0.3); }
+
+  /* ── SWAP GROUP HEADERS (My Swaps tab) ── */
+  .swap-group-header {
+    font-family: 'Playfair Display', serif; font-style: italic;
+    font-size: 14px; font-weight: 700; color: #44200A;
+    padding: 16px 0 8px; border-bottom: 1px solid rgba(0,0,0,0.06);
+    margin-bottom: 12px;
+  }
+
   /* ── BUTTONS ── */
   .btn-primary {
     display: block; width: 100%; margin-top: 16px;
