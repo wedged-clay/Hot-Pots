@@ -131,6 +131,12 @@ export default function HotPotsApp() {
   const [editName,       setEditName]       = useState("");
   const [editBio,        setEditBio]        = useState("");
   const [savingProfile,  setSavingProfile]  = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [pwCurrent,      setPwCurrent]      = useState("");
+  const [pwNew,          setPwNew]          = useState("");
+  const [pwConfirm,      setPwConfirm]      = useState("");
+  const [pwError,        setPwError]        = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
   const [studioCode,     setStudioCode]     = useState("");
   const [linkCopied,     setLinkCopied]     = useState(false);
   const [revealMatch,    setRevealMatch]    = useState(null);
@@ -460,6 +466,28 @@ export default function HotPotsApp() {
     setAvatarFile(null);
     setAvatarPreview(null);
     setSavingProfile(false);
+  };
+
+  // ── Change Password ───────────────────────────────────────────
+  const changePassword = async () => {
+    setPwError("");
+    if (!pwNew || pwNew.length < 6) { setPwError("New password must be at least 6 characters."); return; }
+    if (pwNew !== pwConfirm) { setPwError("Passwords don't match."); return; }
+    setSavingPassword(true);
+    const { error: authErr } = await supabase.auth.signInWithPassword({
+      email: session.user.email,
+      password: pwCurrent,
+    });
+    if (authErr) {
+      setSavingPassword(false);
+      setPwError("Current password is incorrect.");
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: pwNew });
+    setSavingPassword(false);
+    if (error) { setPwError(error.message); return; }
+    setChangingPassword(false);
+    setPwCurrent(""); setPwNew(""); setPwConfirm("");
   };
 
   const dismissReveal = () => {
@@ -1014,6 +1042,10 @@ export default function HotPotsApp() {
                 setAvatarPreview(null);
                 setEditingProfile(true);
               }}>Edit Profile</button>
+              <button className="btn-secondary" style={{ marginTop: 8 }} onClick={() => {
+                setPwCurrent(""); setPwNew(""); setPwConfirm(""); setPwError("");
+                setChangingPassword(true);
+              }}>Change Password</button>
 
               {studioCode && (
                 <div style={{marginTop:16, background:"white", borderRadius:18, padding:18, border:`1px solid ${C.ochre}44`}}>
@@ -1229,6 +1261,64 @@ export default function HotPotsApp() {
                   background: C.ember, color: "white", fontWeight: 600, cursor: "pointer", fontSize: 14,
                   opacity: (savingProfile || !editName.trim()) ? 0.6 : 1,
                 }}>{savingProfile ? "Saving…" : "Save Changes"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Change Password modal ── */}
+        {changingPassword && (
+          <div style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)",
+            zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+          }} onClick={() => setChangingPassword(false)}>
+            <div style={{
+              background: C.sand, borderRadius: 20, padding: 24, width: "100%", maxWidth: 400,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: C.bark, marginBottom: 18 }}>
+                Change Password
+              </div>
+
+              {[
+                { label: "Current Password", val: pwCurrent, setter: setPwCurrent },
+                { label: "New Password",     val: pwNew,     setter: setPwNew },
+                { label: "Confirm New Password", val: pwConfirm, setter: setPwConfirm },
+              ].map(({ label, val, setter }) => (
+                <div key={label}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: C.bark, display: "block", marginBottom: 4 }}>
+                    {label}
+                  </label>
+                  <input
+                    type="password"
+                    value={val}
+                    onChange={e => setter(e.target.value)}
+                    style={{
+                      width: "100%", padding: "10px 12px", borderRadius: 10, border: `1px solid ${C.ochre}66`,
+                      fontSize: 14, background: "white", color: C.bark, marginBottom: 14, boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              ))}
+
+              {pwError && (
+                <div style={{ fontSize: 13, color: "#dc2626", marginBottom: 14 }}>{pwError}</div>
+              )}
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <button onClick={() => setChangingPassword(false)} style={{
+                  flex: 1, padding: "11px 0", borderRadius: 12, border: `1px solid ${C.ochre}44`,
+                  background: "white", color: C.bark, fontWeight: 600, cursor: "pointer", fontSize: 14,
+                }}>Cancel</button>
+                <button
+                  onClick={changePassword}
+                  disabled={savingPassword || !pwCurrent || !pwNew || !pwConfirm}
+                  style={{
+                    flex: 2, padding: "11px 0", borderRadius: 12, border: "none",
+                    background: C.ember, color: "white", fontWeight: 600, cursor: "pointer", fontSize: 14,
+                    opacity: (savingPassword || !pwCurrent || !pwNew || !pwConfirm) ? 0.6 : 1,
+                  }}
+                >{savingPassword ? "Saving…" : "Update Password"}</button>
               </div>
             </div>
           </div>
