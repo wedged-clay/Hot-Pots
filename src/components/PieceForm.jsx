@@ -2,15 +2,19 @@ import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import CameraCapture from "./CameraCapture";
 import { useDraftPhoto } from "../hooks/useDraftPhoto";
 
-const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor, storageKey }, ref) {
-  const saved = storageKey ? JSON.parse(localStorage.getItem(storageKey) || "{}") : {};
+function loadDraft(storageKey) {
+  if (!storageKey) return {};
+  try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); }
+  catch { return {}; }
+}
 
+const PieceForm = forwardRef(function PieceForm({ label, typeLabel, typeColor, storageKey }, ref) {
   const { photoFile, photoUrl, savePhoto, clearPhoto } = useDraftPhoto(storageKey ? storageKey + "-photo" : null);
-  const [name,        setName]        = useState(saved.name        ?? "");
-  const [clayBody,    setClayBody]    = useState(saved.clayBody    ?? "");
-  const [method,      setMethod]      = useState(saved.method      ?? "");
-  const [glaze,       setGlaze]       = useState(saved.glaze       ?? "");
-  const [description, setDescription] = useState(saved.description ?? "");
+  const [name,        setName]        = useState(() => loadDraft(storageKey).name        ?? "");
+  const [clayBody,    setClayBody]    = useState(() => loadDraft(storageKey).clayBody    ?? "");
+  const [method,      setMethod]      = useState(() => loadDraft(storageKey).method      ?? "");
+  const [glaze,       setGlaze]       = useState(() => loadDraft(storageKey).glaze       ?? "");
+  const [description, setDescription] = useState(() => loadDraft(storageKey).description ?? "");
 
   // Persist text fields to localStorage on every change
   useEffect(() => {
