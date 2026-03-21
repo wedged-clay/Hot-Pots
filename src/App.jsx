@@ -284,6 +284,18 @@ export default function HotPotsApp() {
   // ── Keep activeConvoRef in sync (for Realtime closure) ───────
   useEffect(() => { activeConvoRef.current = activeConvo; }, [activeConvo]);
 
+  // ── Mark conversation messages as read ──────────────────────
+  const markConversationRead = useCallback(async (convoId) => {
+    setConversations(prev => prev.map(c =>
+      c.id !== convoId ? c : { ...c, unreadCount: 0 }
+    ));
+    await supabase.from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .eq("conversation_id", convoId)
+      .neq("sender_id", profile.id)
+      .is("read_at", null);
+  }, [profile]);
+
   // ── Realtime: subscribe to incoming messages ─────────────────
   // Requires Realtime enabled on the messages table in Supabase dashboard
   useEffect(() => {
@@ -494,17 +506,6 @@ export default function HotPotsApp() {
     }
     setIsSending(false);
   };
-
-  const markConversationRead = useCallback(async (convoId) => {
-    setConversations(prev => prev.map(c =>
-      c.id !== convoId ? c : { ...c, unreadCount: 0 }
-    ));
-    await supabase.from("messages")
-      .update({ read_at: new Date().toISOString() })
-      .eq("conversation_id", convoId)
-      .neq("sender_id", profile.id)
-      .is("read_at", null);
-  }, [profile]);
 
   const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount ?? 0), 0);
 
