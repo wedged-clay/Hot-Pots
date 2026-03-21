@@ -5,11 +5,13 @@ export const C = {
   ochre:      "#D97706",   // amber/ochre accent
   mahogany:   "#7C2D12",   // deep brown
   bark:       "#44200A",   // near-black brown
-  sand:       "#FEF3C7",   // warm cream bg
-  parchment:  "#FDF0E0",   // page bg
-  blush:      "#FDE8D8",   // light card bg
-  ash:        "#FDEBD0",   // input bg
+  sand:       "#FDF8F0",   // warm cream bg (desaturated)
+  parchment:  "#FAF6F1",   // page bg (cooler warm white)
+  blush:      "#FFF5EF",   // light card bg (lighter, neutral)
+  ash:        "#FAF6F1",   // input bg (matches page)
   rust:       "#9A3412",   // muted red
   copper:     "#B45309",   // copper accent
   mist:       "#92400E",   // muted brown text
+  surface:    "#FFFFFF",   // card backgrounds
+  border:     "#E8DCCF",   // warm neutral border
 };
