@@ -74,6 +74,7 @@ test.describe("Piece submission form", () => {
       localStorage.setItem("piece1-draft", "NOT_JSON{{{")
     );
     await page.reload();
+    await expect(page.getByTestId("tab-home")).toBeVisible({ timeout: 10_000 });
     await page.getByTestId("tab-enter").click();
     await expect(page.getByTestId("error-boundary")).not.toBeVisible();
     await expect(page.getByPlaceholder(/celadon yunomi/i).first()).toHaveValue("");
