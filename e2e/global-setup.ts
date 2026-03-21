@@ -30,8 +30,6 @@ export default async function globalSetup() {
   const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL ?? "admin@hotpots.local";
   const ADMIN_PASS  = requireEnv("TEST_ADMIN_PASS");
 
-  await Promise.all([
-    saveAuth(TEST_EMAIL,  TEST_PASS,  "e2e/.auth/user.json"),
-    saveAuth(ADMIN_EMAIL, ADMIN_PASS, "e2e/.auth/admin.json"),
-  ]);
+  await saveAuth(TEST_EMAIL,  TEST_PASS,  "e2e/.auth/user.json");
+  await saveAuth(ADMIN_EMAIL, ADMIN_PASS, "e2e/.auth/admin.json");
 }
