@@ -1,4 +1,6 @@
 // Hand-drawn style pottery pot SVG icon.
+// Shape: globular thrown-pot silhouette — wide round belly, constricted neck,
+// flared lip. All cubic bezier curves, no straight sides.
 // Props: size (number, default 24), color (string, default "currentColor")
 export default function PotIcon({ size = 24, color = "currentColor", style, ...props }) {
   return (
@@ -7,44 +9,38 @@ export default function PotIcon({ size = 24, color = "currentColor", style, ...p
       height={size}
       viewBox="0 0 48 48"
       fill="none"
-      xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       style={style}
       {...props}
     >
-      {/* Rim */}
+      {/* Body — traces left rim → neck constriction → wide belly → foot → mirror right */}
       <path
-        d="M15 11 C15 9 17 8 24 8 C31 8 33 9 33 11 L33 14 C33 15.1 32.1 16 31 16 L17 16 C15.9 16 15 15.1 15 14 Z"
+        d="M 14 11
+           C 15 13 16 15 16 18
+           C 10 21 4 26 4 32
+           C 4 38 10 43 18 43
+           L 30 43
+           C 38 43 44 38 44 32
+           C 44 26 38 21 32 18
+           C 32 15 33 13 34 11
+           C 29 8 19 8 14 11 Z"
         fill={color}
-        opacity="0.9"
       />
-      {/* Handles */}
+      {/* Rim lip — flares slightly wider than the neck, like a thrown edge */}
       <path
-        d="M15 17 C12 17 10 19 10 21 C10 23 12 24 14 24"
+        d="M 11 11 C 16 7 32 7 37 11"
         stroke={color}
-        strokeWidth="2.2"
+        strokeWidth="3"
         strokeLinecap="round"
         fill="none"
       />
+      {/* Sheen — subtle curved highlight on the left belly */}
       <path
-        d="M33 17 C36 17 38 19 38 21 C38 23 36 24 34 24"
-        stroke={color}
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        fill="none"
-      />
-      {/* Body */}
-      <path
-        d="M16 16 C13 20 11 26 12 32 C13 37 17 40 24 40 C31 40 35 37 36 32 C37 26 35 20 32 16 Z"
-        fill={color}
-      />
-      {/* Sheen highlight */}
-      <path
-        d="M19 21 C18 24 18 28 19 31"
+        d="M 9 25 C 8 29 8 34 11 39"
         stroke="white"
-        strokeWidth="1.5"
+        strokeWidth="2"
         strokeLinecap="round"
-        opacity="0.25"
+        opacity="0.22"
         fill="none"
       />
     </svg>
