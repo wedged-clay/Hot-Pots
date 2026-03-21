@@ -41,3 +41,34 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # Only runs on pushes to main (not PRs), and only if all tests passed.
+  # This replaces Vercel's automatic GitHub deploy — disable "Deploy on Push"
+  # in Vercel project settings (Settings → Git) so this job is the sole
+  # trigger for production deploys.
+  #
+  # Required GitHub secrets:
+  #   VERCEL_TOKEN       — create at vercel.com/account/tokens
+  #   VERCEL_ORG_ID      — run `vercel link` locally, then check .vercel/project.json
+  #   VERCEL_PROJECT_ID  — same file
+  deploy:
+    needs: playwright
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Vercel production
+        run: npx vercel --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+        env:
+          VERCEL_ORG_ID:     ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
