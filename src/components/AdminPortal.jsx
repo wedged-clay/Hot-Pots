@@ -320,7 +320,7 @@ function RoundPhaseStepper({ status }) {
 }
 
 function BarChart({ title, labels, values, max }) {
-  const peak = max || Math.max(...values);
+  const peak = max || Math.max(...values, 1);
   return (
     <div className="bar-chart">
       <div className="bar-chart-title">{title}</div>
@@ -328,7 +328,7 @@ function BarChart({ title, labels, values, max }) {
         <div className="bar-row" key={label}>
           <div className="bar-label">{label}</div>
           <div className="bar-track">
-            <div className="bar-fill" style={{ width: `${(values[i]/peak)*100}%` }} />
+            <div data-testid="bar-segment" className="bar-fill" style={{ width: `${(values[i]/peak)*100}%` }} />
           </div>
           <div className="bar-val">{values[i]}</div>
         </div>
@@ -813,6 +813,7 @@ function MemberManagement({ isAdmin }) {
 
     supabase.from("studio_codes")
       .select("id, code")
+      .eq("active", true)
       .limit(1)
       .single()
       .then(({ data }) => {
@@ -844,7 +845,7 @@ function MemberManagement({ isAdmin }) {
     if (inviteCodeId) {
       await supabase.from("studio_codes").update({ code: newCode }).eq("id", inviteCodeId);
     } else {
-      const { data } = await supabase.from("studio_codes").insert({ code: newCode }).select().single();
+      const { data } = await supabase.from("studio_codes").insert({ code: newCode, active: true }).select().single();
       if (data) setInviteCodeId(data.id);
     }
     setInviteCode(newCode);
@@ -860,7 +861,7 @@ function MemberManagement({ isAdmin }) {
       <div className="invite-code">
         <div>
           <div style={{fontSize:10, fontWeight:600, color:"#92400E", marginBottom:2}}>STUDIO INVITE CODE</div>
-          <div className="invite-code-val">{inviteCode}</div>
+          <div data-testid="invite-code" className="invite-code-val">{inviteCode}</div>
         </div>
         {isAdmin && (
           <button className="btn-sm btn-ghost-sm" onClick={regenerateCode}>Regenerate</button>
