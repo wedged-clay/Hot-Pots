@@ -668,9 +668,14 @@ export default function HotPotsApp() {
                 <div className="donate-hero-text">
                   This app is free for our studio community. If you love using it, a small contribution helps cover hosting and keeps new features coming.
                 </div>
-                <div style={{fontSize:13, color:"#92400E", marginTop:4, lineHeight:1.6}}>
-                  Tap the <strong style={{color:"#E8450A"}}>☕</strong> button in the bottom-right corner — any amount helps!
-                </div>
+                <a
+                  href="https://www.buymeacoffee.com/wedged"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-coffee"
+                >
+                  ☕ Buy Me a Coffee
+                </a>
               </div>
             </>
           )}
