@@ -44,6 +44,9 @@ pnpm-debug.log*
 # ── Testing ───────────────────────────────────────────────────
 coverage/
 .nyc_output/
+e2e/.auth/
+playwright-report/
+test-results/
 
 # ── Misc ──────────────────────────────────────────────────────
 *.local

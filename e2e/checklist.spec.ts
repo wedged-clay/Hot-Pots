@@ -14,7 +14,7 @@ const TEST_PASS   = requireEnv("TEST_PASS");
 const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL ?? "admin@hotpots.local";
 const ADMIN_PASS  = requireEnv("TEST_ADMIN_PASS");
 
-// ── Helper ────────────────────────────────────────────────────────
+// ── Helper (used only by Auth flow tests that exercise the login UI) ──
 async function signIn(page: Page, email = TEST_EMAIL, pass = TEST_PASS) {
   await page.goto("/");
   await page.getByPlaceholder(/email/i).fill(email);
@@ -36,6 +36,7 @@ test("app renders without crashing", async ({ page }) => {
 });
 
 // ── Auth ──────────────────────────────────────────────────────────
+// These tests exercise the login UI directly — no storageState.
 test.describe("Auth flow", () => {
   test("valid credentials reach home tab", async ({ page }) => {
     await signIn(page);
@@ -53,15 +54,17 @@ test.describe("Auth flow", () => {
 
 // ── Piece submission form ─────────────────────────────────────────
 test.describe("Piece submission form", () => {
+  test.use({ storageState: "e2e/.auth/user.json" });
+
   test.beforeEach(async ({ page }) => {
-    await signIn(page);
+    await page.goto("/");
     await page.getByTestId("tab-enter").click();
   });
 
   test("draft persists across page reload", async ({ page }) => {
     await page.getByPlaceholder(/celadon yunomi/i).first().fill("Test Bowl");
     await page.reload();
-    await signIn(page);
+    await expect(page.getByTestId("tab-home")).toBeVisible({ timeout: 10_000 });
     await page.getByTestId("tab-enter").click();
     await expect(page.getByPlaceholder(/celadon yunomi/i).first()).toHaveValue("Test Bowl");
   });
@@ -71,7 +74,6 @@ test.describe("Piece submission form", () => {
       localStorage.setItem("piece1-draft", "NOT_JSON{{{")
     );
     await page.reload();
-    await signIn(page);
     await page.getByTestId("tab-enter").click();
     await expect(page.getByTestId("error-boundary")).not.toBeVisible();
     await expect(page.getByPlaceholder(/celadon yunomi/i).first()).toHaveValue("");
@@ -80,7 +82,7 @@ test.describe("Piece submission form", () => {
 
 // ── Messages null guard (Bug 1 regression) ────────────────────────
 test.describe("Messages thread", () => {
-  test.beforeEach(async ({ page }) => { await signIn(page); });
+  test.use({ storageState: "e2e/.auth/user.json" });
 
   test("stale ?convo= param does not crash app", async ({ page }) => {
     await page.goto("/?convo=00000000-0000-0000-0000-000000000000");
@@ -91,7 +93,11 @@ test.describe("Messages thread", () => {
 
 // ── Offline mode ──────────────────────────────────────────────────
 test.describe("Offline mode", () => {
-  test.beforeEach(async ({ page }) => { await signIn(page); });
+  test.use({ storageState: "e2e/.auth/user.json" });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto("/");
+  });
 
   test("offline banner appears when network drops", async ({ page, context }) => {
     await context.setOffline(true);
@@ -108,8 +114,10 @@ test.describe("Offline mode", () => {
 
 // ── Admin portal ──────────────────────────────────────────────────
 test.describe("Admin portal", () => {
+  test.use({ storageState: "e2e/.auth/admin.json" });
+
   test.beforeEach(async ({ page }) => {
-    await signIn(page, ADMIN_EMAIL, ADMIN_PASS);
+    await page.goto("/");
     await page.getByTestId("tab-admin").click();
   });
 
