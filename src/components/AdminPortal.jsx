@@ -18,6 +18,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase/client";
+import PotIcon from "./PotIcon";
 
 // ── Shared colours (mirrors main app) ────────────────────────
 const C = {
@@ -70,7 +71,8 @@ const adminStyles = `
   /* Page heading */
   .adm-heading {
     font-family: 'Playfair Display', serif;
-    font-size: 20px; font-weight: 700; color: ${C.bark};
+    font-style: italic; font-weight: 400;
+    font-size: 20px; color: ${C.bark};
     margin-bottom: 4px;
   }
   .adm-subheading { font-size: 12px; color: #92400E; margin-bottom: 18px; }
@@ -633,7 +635,7 @@ function MatchOversight({ isAdmin, rounds }) {
 
       {filtered.length === 0 ? (
         <div className="adm-empty">
-          <div className="adm-empty-icon">🏺</div>
+          <PotIcon size={36} color="#7C2D12" style={{ display: "block", margin: "0 auto 10px" }} />
           No matches found for these filters.
         </div>
       ) : filtered.map(m => (

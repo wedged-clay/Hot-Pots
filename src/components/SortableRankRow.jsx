@@ -1,6 +1,7 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { C } from "../constants/colours";
+import PotIcon from "./PotIcon";
 
 export default function SortableRankRow({ id, idx, totalCount, p, onRemove, onUp, onDown }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -14,7 +15,7 @@ export default function SortableRankRow({ id, idx, totalCount, p, onRemove, onUp
       <div className={`rank-badge rank-${idx}`}>#{idx + 1}</div>
       {p.photoUrl
         ? <img src={p.photoUrl} alt={p.name} style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
-        : <span className="rank-emoji">🏺</span>}
+        : <PotIcon size={22} color={C.mahogany} />}
       <div className="rank-info">
         <div className="rank-name">{p.name}</div>
         <div className="rank-sub">{p.maker} · {p.clay} · {p.method}</div>
