@@ -9,6 +9,7 @@ on:
 jobs:
   playwright:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       TEST_EMAIL:             ${{ secrets.TEST_EMAIL }}
       TEST_PASS:              ${{ secrets.TEST_PASS }}
