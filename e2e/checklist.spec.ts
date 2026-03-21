@@ -23,6 +23,18 @@ async function signIn(page: Page, email = TEST_EMAIL, pass = TEST_PASS) {
   await expect(page.getByTestId("tab-home")).toBeVisible({ timeout: 10_000 });
 }
 
+// ── Smoke test (no credentials required) ─────────────────────────
+// This must be the first test. It catches any crash that prevents the
+// app from rendering at all — before auth, before data loading.
+// A failure here means the entire app is broken for every user.
+test("app renders without crashing", async ({ page }) => {
+  await page.goto("/");
+  // If an error boundary is visible the app threw during render
+  await expect(page.getByTestId("error-boundary")).not.toBeVisible();
+  // Auth screen should appear, confirming React mounted successfully
+  await expect(page.getByPlaceholder(/email/i)).toBeVisible({ timeout: 10_000 });
+});
+
 // ── Auth ──────────────────────────────────────────────────────────
 test.describe("Auth flow", () => {
   test("valid credentials reach home tab", async ({ page }) => {
