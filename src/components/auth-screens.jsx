@@ -2,6 +2,21 @@ import { useState, useEffect } from "react";
 import { supabase } from "../supabase/client";
 import PotIcon from "./PotIcon";
 
+const GoogleIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>
+);
+
+const AppleIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 814 1000" aria-hidden="true" fill="currentColor">
+    <path d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 376.6 0 228.7 0 185.6c0-19.4 3.9-37.3 13-53.4 35.7-59.8 105.8-94.4 176.8-94.4 64 0 120.5 41.7 160.1 41.7 38 0 103.3-44.8 176.8-44.8 23.3 0 97.3 2.6 150.4 95.6zm-234.5-173.8c27.9-36.9 47.7-88.6 47.7-140.4 0-7.1-.6-14.2-1.9-20.1-45.3 1.9-98.8 30.2-131.6 71.8-26 30.8-51 82.6-51 135.1 0 7.7 1.3 15.5 1.9 18.1 3.2.6 8.4 1.3 13.6 1.3 40.8 0 92.1-27.3 121.3-65.8z"/>
+  </svg>
+);
+
 // ============================================================
 // AUTH FLOW — Hot—Pots (Supabase Auth)
 // ============================================================
@@ -309,6 +324,20 @@ const styles = `
     line-height: 1.6; margin-top: 16px;
   }
   .terms-text a { color: #E8450A; text-decoration: underline; cursor: pointer; }
+
+  /* OAuth provider buttons */
+  .oauth-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 13px 20px; border-radius: 14px; font-size: 15px;
+    font-weight: 600; cursor: pointer; border: 1.5px solid #E5E7EB;
+    background: #fff; color: #111; margin-top: 10px;
+    font-family: 'DM Sans', sans-serif;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .oauth-btn:hover:not(:disabled) { background: #F9FAFB; border-color: #D1D5DB; }
+  .oauth-btn.apple { background: #000; color: #fff; border-color: #000; }
+  .oauth-btn.apple:hover:not(:disabled) { background: #1a1a1a; }
+  .oauth-btn:disabled { opacity: 0.6; cursor: default; }
 `;
 
 // ── Password strength helper ──────────────────────────────────
@@ -439,6 +468,16 @@ export default function AuthScreens({ onAuthComplete }) {
     onAuthComplete?.();
   };
 
+  const handleOAuth = async (provider) => {
+    setLoading(true); clearError();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) { setAuthError(error.message); setLoading(false); }
+    // on success the browser redirects; loading stays true until redirect
+  };
+
   // ── SPLASH ──────────────────────────────────────────────────
   if (screen === "splash") return (
     <>
@@ -452,9 +491,15 @@ export default function AuthScreens({ onAuthComplete }) {
               The pottery swap community for your studio. Give a piece, get a piece.
             </div>
             <div className="splash-cta">
-              <button className="auth-btn" onClick={()=>setScreen("signup")}>Create an Account</button>
-              <button className="auth-btn-ghost" onClick={()=>setScreen("signin")}>Sign In</button>
+              <button className="oauth-btn" disabled={loading} onClick={()=>handleOAuth("google")}>
+                <GoogleIcon /> Continue with Google
+              </button>
+              <button className="oauth-btn apple" disabled={loading} onClick={()=>handleOAuth("apple")}>
+                <AppleIcon /> Continue with Apple
+              </button>
               <div className="auth-divider">or</div>
+              <button className="auth-btn" onClick={()=>setScreen("signup")}>Create an Account</button>
+              <button className="auth-btn-ghost" onClick={()=>setScreen("signin")}>Sign In with Email</button>
               <button className="auth-btn-ghost" onClick={()=>setScreen("magic")} style={{marginTop:0}}>
                 ✉️ Sign in with Magic Link
               </button>
@@ -513,7 +558,13 @@ export default function AuthScreens({ onAuthComplete }) {
             </button>
 
             <div className="auth-divider">or</div>
-            <button className="auth-btn-ghost" style={{marginTop:0}} onClick={()=>setScreen("magic")}>
+            <button className="oauth-btn" disabled={loading} onClick={()=>handleOAuth("google")}>
+              <GoogleIcon /> Continue with Google
+            </button>
+            <button className="oauth-btn apple" disabled={loading} onClick={()=>handleOAuth("apple")}>
+              <AppleIcon /> Continue with Apple
+            </button>
+            <button className="auth-btn-ghost" style={{marginTop:10}} onClick={()=>setScreen("magic")}>
               ✉️ Use Magic Link instead
             </button>
 
