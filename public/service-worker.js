@@ -3,7 +3,7 @@
 // Strategy: Cache-first for static assets, Network-first for API
 // ============================================================
 
-const APP_VERSION = "hotpots-v1.0.0";
+const APP_VERSION = "hotpots-v1.1.0";
 
 const STATIC_CACHE  = `${APP_VERSION}-static`;
 const DYNAMIC_CACHE = `${APP_VERSION}-dynamic`;
