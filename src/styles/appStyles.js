@@ -1,5 +1,5 @@
 export const styles = `
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&family=Caveat:wght@500;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&family=Fredoka+One&display=swap');
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -119,7 +119,7 @@ export const styles = `
   .round-status {
     display: inline-block;
     background: #E8450A; color: white;
-    font-family: 'Caveat', cursive; font-size: 14px; font-weight: 700;
+    font-family: 'Fredoka One', sans-serif; font-size: 14px; font-weight: 700;
     padding: 2px 10px; border-radius: 20px;
     letter-spacing: 0.5px; margin-bottom: 10px;
   }
@@ -138,7 +138,7 @@ export const styles = `
     background: linear-gradient(90deg, #E8450A, #D97706);
     border-radius: 20px;
   }
-  .round-progress-label { font-family: 'Caveat', cursive; font-size: 13px; font-weight: 500; opacity: 0.75; }
+  .round-progress-label { font-family: 'Fredoka One', sans-serif; font-size: 13px; font-weight: 500; opacity: 0.75; }
 
   /* ── BUTTONS ── */
   .btn-primary {
@@ -227,7 +227,7 @@ export const styles = `
   .match-pieces { font-size: 13px; font-weight: 500; color: #44200A; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .match-partner { font-size: 12px; color: #92400E; }
   .match-type-badge {
-    font-family: 'Caveat', cursive; font-size: 13px; font-weight: 500;
+    font-family: 'Fredoka One', sans-serif; font-size: 13px; font-weight: 500;
     padding: 2px 9px; border-radius: 20px; flex-shrink: 0;
   }
   .badge-random { background: #FDF8F0; color: #B45309; }
@@ -275,7 +275,7 @@ export const styles = `
   .rank-badge {
     width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
     background: linear-gradient(135deg, #E8450A, #D4380D);
-    color: white; font-family: 'Caveat', cursive; font-size: 15px; font-weight: 700;
+    color: white; font-family: 'Fredoka One', sans-serif; font-size: 15px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
   }
   .rank-badge.rank-1 { background: linear-gradient(135deg, #D97706, #B45309); }
