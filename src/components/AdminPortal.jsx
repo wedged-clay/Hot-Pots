@@ -469,6 +469,19 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
         </div>
       ))}
 
+      {rounds.length === 0 && (
+        <div style={{
+          textAlign:"center", padding:"32px 16px",
+          color:"#92400E", fontSize:13,
+          border:"1.5px dashed #D9770660",
+          borderRadius:12, background:"#FFFBF7",
+        }}>
+          <div style={{fontSize:28, marginBottom:8}}>🏺</div>
+          <div style={{fontWeight:600, marginBottom:4}}>No rounds yet</div>
+          <div style={{opacity:0.75}}>Use the button above to open the first round for your studio.</div>
+        </div>
+      )}
+
       {/* Modals */}
       {modal === "new" && (
         <div className="adm-modal-backdrop" onClick={e => e.target===e.currentTarget && setModal(null)}>
