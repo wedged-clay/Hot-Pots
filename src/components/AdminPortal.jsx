@@ -344,7 +344,7 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
   const [modal, setModal]   = useState(null); // null | 'new' | 'confirm-match' | 'confirm-close'
   const [activeRound, setActiveRound] = useState(null);
   const [toast, setToast]   = useState(null);
-  const [newRound, setNewRound] = useState({ title:"", opens:"", closes:"" });
+  const [newRound, setNewRound] = useState({ title:"", opens:"", closes:"", matchType:"random" });
 
   const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(null), 2500); };
 
@@ -363,7 +363,7 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
         showToast(`❌ ${error.message}`);
       } else {
         refreshRounds();
-        showToast(`✅ Done — ${data.piece1Pairs} random + ${data.piece2Pairs} choice pairs`);
+        showToast(`✅ Done — ${data.pairs} pairs matched`);
       }
     }
     if (modal === "confirm-close") {
@@ -398,15 +398,16 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
     }
     if (modal === "new") {
       const { error: insertErr } = await supabase.from("raffle_rounds").insert({
-        title:     newRound.title,
-        status:    "open",
-        opens_at:  newRound.opens  || null,
-        closes_at: newRound.closes || null,
+        title:      newRound.title,
+        status:     "open",
+        opens_at:   newRound.opens  || null,
+        closes_at:  newRound.closes || null,
+        match_type: newRound.matchType,
       });
       if (insertErr) { showToast(`❌ ${insertErr.message}`); return; }
       refreshRounds();
       showToast("🔥 New round opened!");
-      setNewRound({ title:"", opens:"", closes:"" });
+      setNewRound({ title:"", opens:"", closes:"", matchType:"random" });
     }
     setModal(null);
   };
@@ -432,7 +433,10 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
                 {fmtDate(round.opens_at)} → {fmtDate(round.closes_at)} · {round.participants} participants
               </div>
             </div>
-            <span className={`status-pill status-${round.status}`}>{round.status}</span>
+            <div style={{display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4}}>
+              <span className={`status-pill status-${round.status}`}>{round.status}</span>
+              <span style={{fontSize:10, color:"#92400E", fontWeight:500}}>{round.match_type === "ranking" ? "🏆 Ranking" : "🎲 Random"}</span>
+            </div>
           </div>
 
           <RoundPhaseStepper status={round.status} />
@@ -488,6 +492,30 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
                   value={newRound.closes} onChange={e=>setNewRound(r=>({...r, closes:e.target.value}))} />
               </div>
             </div>
+            <div className="adm-modal-field">
+              <label className="adm-modal-label">Matching Mode</label>
+              <div style={{display:"flex", gap:8, marginTop:4}}>
+                {[
+                  { value:"random",  label:"🎲 Random",  desc:"Pieces are randomly paired" },
+                  { value:"ranking", label:"🏆 Ranking",  desc:"Members rank each other's pieces" },
+                ].map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={()=>setNewRound(r=>({...r, matchType:opt.value}))}
+                    style={{
+                      flex:1, padding:"10px 8px", borderRadius:10, cursor:"pointer",
+                      border: newRound.matchType === opt.value ? `2px solid #E8450A` : `1.5px solid #D9770640`,
+                      background: newRound.matchType === opt.value ? "#FEF2EC" : "white",
+                      color: newRound.matchType === opt.value ? "#E8450A" : "#92400E",
+                      fontFamily:"'DM Sans',sans-serif", fontSize:12, fontWeight: newRound.matchType === opt.value ? 700 : 500,
+                      textAlign:"center",
+                    }}>
+                    <div>{opt.label}</div>
+                    <div style={{fontSize:10, opacity:0.75, marginTop:2}}>{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
             <div style={{display:"flex", gap:10, marginTop:6}}>
               <button className="btn-sm btn-neutral-sm" style={{flex:1, padding:"11px"}} onClick={()=>setModal(null)}>Cancel</button>
               <button className="btn-sm btn-primary-sm" style={{flex:2, padding:"11px"}}
@@ -508,7 +536,9 @@ function RoundManagement({ isAdmin, rounds, refreshRounds }) {
               <div className="confirm-box-title">{activeRound?.title}</div>
               <div className="confirm-box-text">
                 {modal === "confirm-match"
-                  ? `This will run the rank-weighted matching algorithm across all ${activeRound?.participants} submissions. Piece 1s will be randomly paired, Piece 2s matched by ranked choice. This cannot be undone without manual intervention.`
+                  ? activeRound?.match_type === "ranking"
+                    ? `This will run the ranked-choice matching algorithm across all ${activeRound?.participants} submissions. Members are paired based on their mutual rankings. This cannot be undone without manual intervention.`
+                    : `This will randomly pair all ${activeRound?.participants} submissions. This cannot be undone without manual intervention.`
                   : "Results will be published to all participants. Matched pairs will receive a push notification and a new messaging thread will open."}
               </div>
             </div>
@@ -1056,7 +1086,7 @@ export default function AdminPortal({ role = "admin" }) {
   async function fetchRounds() {
     const { data } = await supabase
       .from("raffle_rounds")
-      .select("id, title, status, opens_at, closes_at")
+      .select("id, title, status, opens_at, closes_at, match_type")
       .order("opens_at", { ascending: false });
     if (!data) return;
 

@@ -30,6 +30,7 @@ import { formatMsgDate, toInitials, formatCountdown, daysLeft } from "./utils/fo
 //   id uuid PK
 //   title text
 //   status enum('open','matching','complete')
+//   match_type enum('random','ranking')  -- chosen by admin at round creation
 //   opens_at timestamptz
 //   closes_at timestamptz
 //   created_at timestamptz
@@ -137,7 +138,6 @@ export default function HotPotsApp() {
   const [avatarFile,     setAvatarFile]     = useState(null);
   const [avatarPreview,  setAvatarPreview]  = useState(null);
   const piece1Ref = useRef();
-  const piece2Ref = useRef();
   const activeConvoRef = useRef(null); // mirrors activeConvo for Realtime closure
 
   // PWA — SW registration, install prompt, update detection, online status
@@ -161,7 +161,7 @@ export default function HotPotsApp() {
     if (!profile) return;
     // Open round
     supabase.from("raffle_rounds")
-      .select("id, title, status, closes_at")
+      .select("id, title, status, closes_at, match_type")
       .eq("status", "open")
       .order("closes_at", { ascending: true })
       .limit(1)
@@ -174,20 +174,20 @@ export default function HotPotsApp() {
           .eq("round_id", r.id);
         setRound({ ...r, participants: count ?? 0 });
 
-        // Gallery: other members' piece 2 for this round
+        // Gallery: other members' pieces for this round (used in ranking rounds)
         const { data: subs } = await supabase.from("submissions")
-          .select("id, piece_2_name, piece_2_photo_url, piece_2_glaze, piece_2_clay_body, piece_2_method, profiles!user_id(display_name)")
+          .select("id, piece_1_name, piece_1_photo_url, piece_1_glaze, piece_1_clay_body, piece_1_method, profiles!user_id(display_name)")
           .eq("round_id", r.id)
           .neq("user_id", profile.id)
-          .not("piece_2_name", "is", null);
+          .not("piece_1_name", "is", null);
         setGallery((subs ?? []).map(s => ({
           id:     s.id,
-          name:   s.piece_2_name,
+          name:   s.piece_1_name,
           maker:  s.profiles?.display_name ?? "Member",
-          glaze:  s.piece_2_glaze ?? "",
-          clay:   s.piece_2_clay_body ?? "",
-          method: s.piece_2_method ?? "",
-          photoUrl: s.piece_2_photo_url,
+          glaze:  s.piece_1_glaze ?? "",
+          clay:   s.piece_1_clay_body ?? "",
+          method: s.piece_1_method ?? "",
+          photoUrl: s.piece_1_photo_url,
         })));
       });
 
@@ -200,8 +200,8 @@ export default function HotPotsApp() {
         if (subIds.length === 0) { setMatches([]); return; }
         return supabase.from("matches")
           .select(`id, match_type, matched_at,
-            sub_a:submissions!submission_a(user_id, piece_1_name, piece_2_name, piece_1_photo_url, piece_2_photo_url, profiles!user_id(display_name)),
-            sub_b:submissions!submission_b(user_id, piece_1_name, piece_2_name, piece_1_photo_url, piece_2_photo_url, profiles!user_id(display_name)),
+            sub_a:submissions!submission_a(user_id, piece_1_name, piece_1_photo_url, profiles!user_id(display_name)),
+            sub_b:submissions!submission_b(user_id, piece_1_name, piece_1_photo_url, profiles!user_id(display_name)),
             raffle_rounds!round_id(title)`)
           .or(`submission_a.in.(${subIds.join(",")}),submission_b.in.(${subIds.join(",")})`);
       })
@@ -212,15 +212,14 @@ export default function HotPotsApp() {
         const mapped = data.map(m => {
           const mine = m.sub_a?.user_id === profile.id ? m.sub_a : m.sub_b;
           const theirs = m.sub_a?.user_id === profile.id ? m.sub_b : m.sub_a;
-          const isRandom = m.match_type === "random";
           return {
             id:               m.id,
             round:            m.raffle_rounds?.title ?? "Past Round",
             partner:          theirs?.profiles?.display_name ?? "Member",
-            myPiece:          isRandom ? mine?.piece_1_name       : mine?.piece_2_name,
-            partnerPiece:     isRandom ? theirs?.piece_1_name     : theirs?.piece_2_name,
-            myPhotoUrl:       isRandom ? mine?.piece_1_photo_url  : mine?.piece_2_photo_url,
-            partnerPhotoUrl:  isRandom ? theirs?.piece_1_photo_url : theirs?.piece_2_photo_url,
+            myPiece:          mine?.piece_1_name,
+            partnerPiece:     theirs?.piece_1_name,
+            myPhotoUrl:       mine?.piece_1_photo_url,
+            partnerPhotoUrl:  theirs?.piece_1_photo_url,
             type:             m.match_type,
           };
         });
@@ -373,10 +372,9 @@ export default function HotPotsApp() {
     setIsSubmitting(true);
     setSubmitError("");
     const p1 = piece1Ref.current?.getValue();
-    const p2 = piece2Ref.current?.getValue();
-    if (!round?.id || !profile?.id || !p1 || !p2) { setIsSubmitting(false); return; }
+    if (!round?.id || !profile?.id || !p1) { setIsSubmitting(false); return; }
 
-    // Upload photos to Supabase Storage
+    // Upload photo to Supabase Storage
     const uploadPhoto = async (file, prefix) => {
       if (!file) return null;
       const path = `${profile.id}/${prefix}_${Date.now()}`;
@@ -385,12 +383,9 @@ export default function HotPotsApp() {
       return supabase.storage.from("pottery-photos").getPublicUrl(data.path).data.publicUrl;
     };
 
-    let p1Url, p2Url;
+    let p1Url;
     try {
-      [p1Url, p2Url] = await Promise.all([
-        uploadPhoto(p1.photoFile, "p1"),
-        uploadPhoto(p2.photoFile, "p2"),
-      ]);
+      p1Url = await uploadPhoto(p1.photoFile, "p1");
     } catch (uploadErr) {
       setSubmitError(uploadErr.message);
       setIsSubmitting(false);
@@ -406,18 +401,13 @@ export default function HotPotsApp() {
       piece_1_method:      p1.method || null,
       piece_1_glaze:       p1.glaze,
       piece_1_description: p1.description,
-      piece_2_name:        p2.name,
-      piece_2_photo_url:   p2Url,
-      piece_2_clay_body:   p2.clayBody,
-      piece_2_method:      p2.method || null,
-      piece_2_glaze:       p2.glaze,
-      piece_2_description: p2.description,
-      piece_2_rankings:    rankings.map((id, idx) => ({ id, rank: idx + 1 })),
+      piece_2_rankings:    round.match_type === "ranking"
+                             ? rankings.map((id, idx) => ({ id, rank: idx + 1 }))
+                             : [],
     });
 
     if (error) { setSubmitError(error.message); setIsSubmitting(false); return; }
     piece1Ref.current?.clearDraft();
-    piece2Ref.current?.clearDraft();
     setSubmitted(true);
     setIsSubmitting(false);
     // Fire-and-forget confirmation email
@@ -425,7 +415,7 @@ export default function HotPotsApp() {
       body: {
         userId: profile.id,
         type: "submission_confirmed",
-        data: { roundTitle: round?.title ?? "the current round", piece1Name: p1.name, piece2Name: p2.name, closesAt: round?.closes_at },
+        data: { roundTitle: round?.title ?? "the current round", pieceName: p1.name, closesAt: round?.closes_at },
       },
     }).catch(() => {}); // non-blocking
   };
@@ -625,12 +615,16 @@ export default function HotPotsApp() {
                 <div className="section-title">How It Works</div>
               </div>
               <div className="how-card">
-                {[
-                  { n:1, t:"Submit 2 Pieces", d:"Register two pottery pieces you're willing to trade. Add photos, clay body, method, and a description for each." },
-                  { n:2, t:"Piece 1 — Random Raffle", d:"Your first piece enters the raffle draw. You'll be randomly matched with another member's piece — a fun surprise!" },
-                  { n:3, t:"Piece 2 — Your Choice", d:"Browse the gallery of other members' second pieces. Heart the ones you love. You'll only receive a piece you chose." },
+                {(round?.match_type === "ranking" ? [
+                  { n:1, t:"Submit Your Piece", d:"Register the pottery piece you're willing to trade. Add a photo, clay body, method, and description." },
+                  { n:2, t:"Rank the Gallery", d:"Browse other members' pieces and rank the ones you'd love to receive. The more you rank, the better your odds!" },
+                  { n:3, t:"Matched by Choice", d:"The algorithm pairs people based on mutual rankings — maximising everyone's satisfaction." },
                   { n:4, t:"Meet & Exchange", d:"After matching, arrange your swap at the studio. Admire each other's work!" },
-                ].map(s=>(
+                ] : [
+                  { n:1, t:"Submit Your Piece", d:"Register the pottery piece you're willing to trade. Add a photo, clay body, method, and description." },
+                  { n:2, t:"Random Draw", d:"After the round closes, all pieces are randomly shuffled and paired. A fun surprise — you won't know who you'll get!" },
+                  { n:3, t:"Meet & Exchange", d:"After matching, arrange your swap at the studio. Admire each other's work!" },
+                ]).map(s=>(
                   <div className="step" key={s.n}>
                     <div className="step-num">{s.n}</div>
                     <div>
@@ -702,30 +696,23 @@ export default function HotPotsApp() {
                   <div style={{fontSize:60, marginBottom:18}}>🎉</div>
                   <div style={{fontFamily:"'Playfair Display',serif", fontSize:22, marginBottom:10}}>You're in!</div>
                   <div style={{fontSize:14, color:"#92400E", lineHeight:1.6, marginBottom:28}}>
-                    Both pieces submitted for <strong>{round?.title}</strong>. Your random raffle match will be drawn on {round ? new Date(round.closes_at).toLocaleDateString("en-US",{month:"long",day:"numeric"}) : "…"}. Your ranked choice match will be optimised across the whole studio.
+                    {round?.match_type === "ranking"
+                      ? <>Your piece is submitted for <strong>{round?.title}</strong>. The ranking algorithm will find your best match across the studio.</>
+                      : <>Your piece is submitted for <strong>{round?.title}</strong>. You'll be randomly matched on {round ? new Date(round.closes_at).toLocaleDateString("en-US",{month:"long",day:"numeric"}) : "…"}.</>
+                    }
                   </div>
                   <button className="btn-secondary" onClick={()=>{setSubmitted(false);setSubmitStep(1);setTab("home");}}>Back to Home</button>
                 </div>
-              ) : submitStep===1 ? (
+              ) : round?.match_type === "ranking" && submitStep === 2 ? (
                 <>
                   <div className="form-intro">
-                    <div className="form-intro-title">Step 1 of 2 — Random Raffle Piece</div>
-                    <div className="form-intro-text">This piece will be randomly matched with another member. You won't know who you'll get — that's part of the fun!</div>
+                    <div className="form-intro-title">Step 2 of 2 — Rank the Pieces You Want</div>
+                    <div className="form-intro-text">Browse the gallery and rank the pieces you'd love to receive. The algorithm maximises matches using everyone's rank order — the more you rank, the better your odds!</div>
                   </div>
-                  <PieceForm ref={piece1Ref} label="Piece 1" typeLabel="Random Raffle" typeColor="#E8450A" storageKey="draft_piece1" />
-                  <button className="btn-primary" onClick={()=>setSubmitStep(2)}>Continue to Piece 2 →</button>
-                </>
-              ) : (
-                <>
-                  <div className="form-intro">
-                    <div className="form-intro-title">Step 2 of 2 — Choice Piece</div>
-                    <div className="form-intro-text">Submit your second piece, then rank the pieces you'd love to receive. The algorithm maximises matches using everyone's rank order — the more you rank, the better your odds!</div>
-                  </div>
-                  <PieceForm ref={piece2Ref} label="Piece 2" typeLabel="Choice Match" typeColor="#D97706" storageKey="draft_piece2" />
 
                   <div className="gallery-intro">
-                    <div className="gallery-intro-title">🏆 Rank the Pieces You Want</div>
-                    <div className="gallery-intro-text">Tap "Add to ranking" on any pieces you'd be happy to receive. Drag to reorder. Rank 1 = your top pick. The more you rank, the higher your chance of a match.</div>
+                    <div className="gallery-intro-title">🏆 Your Rankings</div>
+                    <div className="gallery-intro-text">Tap "Add to ranking" on pieces you'd be happy to receive. Drag to reorder. Rank 1 = your top pick.</div>
                   </div>
 
                   {/* Ranked list */}
@@ -798,14 +785,37 @@ export default function HotPotsApp() {
                     disabled={rankings.length===0 || isSubmitting}
                     style={{opacity: (rankings.length===0 || isSubmitting) ? 0.5 : 1, cursor: (rankings.length===0 || isSubmitting)?"not-allowed":"pointer"}}
                     onClick={handleSubmitPieces}>
-                    Submit Both Pieces <PotIcon size={16} color="currentColor" style={{ verticalAlign: "middle", marginLeft: 4 }} />
+                    Submit <PotIcon size={16} color="currentColor" style={{ verticalAlign: "middle", marginLeft: 4 }} />
                   </button>
                   {rankings.length===0 && (
                     <div style={{textAlign:"center", fontSize:12, color:"#92400E", marginTop:8}}>
                       Rank at least one piece to continue
                     </div>
                   )}
-                  <button className="btn-secondary" onClick={()=>setSubmitStep(1)}>← Back to Piece 1</button>
+                  <button className="btn-secondary" onClick={()=>setSubmitStep(1)}>← Back to Your Piece</button>
+                </>
+              ) : (
+                <>
+                  <div className="form-intro">
+                    {round?.match_type === "ranking"
+                      ? <>
+                          <div className="form-intro-title">Step 1 of 2 — Your Piece</div>
+                          <div className="form-intro-text">Submit the piece you're offering. Next, you'll rank other members' pieces to find your best match.</div>
+                        </>
+                      : <>
+                          <div className="form-intro-title">Submit Your Piece</div>
+                          <div className="form-intro-text">This piece will be randomly matched with another member's — a fun surprise!</div>
+                        </>
+                    }
+                  </div>
+                  <PieceForm ref={piece1Ref} label="Your Piece" typeLabel={round?.match_type === "ranking" ? "Ranking Round" : "Random Raffle"} typeColor={round?.match_type === "ranking" ? "#D97706" : "#E8450A"} storageKey="draft_piece1" />
+                  {submitError && <div style={{color:"#C1440E",fontSize:12,marginBottom:8}}>⚠ {submitError}</div>}
+                  {round?.match_type === "ranking"
+                    ? <button className="btn-primary" onClick={()=>setSubmitStep(2)}>Continue to Ranking →</button>
+                    : <button className="btn-primary" disabled={isSubmitting} style={{opacity:isSubmitting?0.5:1}} onClick={handleSubmitPieces}>
+                        Submit Piece <PotIcon size={16} color="currentColor" style={{ verticalAlign: "middle", marginLeft: 4 }} />
+                      </button>
+                  }
                 </>
               )}
             </div>
