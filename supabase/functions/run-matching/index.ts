@@ -2,11 +2,14 @@
 // Supabase Edge Function — run-matching
 // supabase/functions/run-matching/index.ts
 //
-// Runs the two-piece matching algorithm for a round:
-//   Piece 1 — random shuffle and pair all submissions
-//   Piece 2 — greedy ranked-choice bipartite matching
+// Runs the matching algorithm for a round using the mode chosen
+// by the admin when the round was created:
 //
-// Creates rows in: matches, conversations
+//   match_type = 'random'  — random shuffle and pair all submissions
+//   match_type = 'ranking' — greedy ranked-choice bipartite matching
+//                            (members rank each other's pieces)
+//
+// Creates rows in: matches
 // Updates: raffle_rounds.status → 'matching'
 //          submissions.status   → 'matched' (for matched subs)
 //
@@ -159,7 +162,7 @@ serve(async (req: Request) => {
   // ── Fetch round ───────────────────────────────────────────────────────────
   const { data: round, error: roundErr } = await supabase
     .from("raffle_rounds")
-    .select("id, status, closes_at")
+    .select("id, status, closes_at, match_type")
     .eq("id", round_id)
     .single();
 
@@ -177,9 +180,11 @@ serve(async (req: Request) => {
   if (subErr)              return json({ error: subErr.message }, 500);
   if (!subs || subs.length < 2) return json({ error: "Need at least 2 submissions to run matching" }, 400);
 
-  // ── Run algorithms ────────────────────────────────────────────────────────
-  const p1 = matchPiece1(subs as Submission[]);
-  const p2 = matchPiece2(subs as Submission[]);
+  // ── Run algorithm based on round's match_type ─────────────────────────────
+  const isRanking = round.match_type === "ranking";
+  const result = isRanking
+    ? matchPiece2(subs as Submission[])
+    : matchPiece1(subs as Submission[]);
 
   // ── Update round status → 'matching' ─────────────────────────────────────
   const { error: statusErr } = await supabase
@@ -189,22 +194,21 @@ serve(async (req: Request) => {
   if (statusErr) return json({ error: statusErr.message }, 500);
 
   // ── Insert matches ────────────────────────────────────────────────────────
-  const matchRows = [
-    ...p1.pairs.map(p => ({
-      round_id,
-      submission_a: p.a,
-      submission_b: p.b,
-      match_type:   "random",
-    })),
-    ...p2.pairs.map(p => ({
-      round_id,
-      submission_a: p.a,
-      submission_b: p.b,
-      match_type:   "choice",
-      rank_a:       p.rankA,
-      rank_b:       p.rankB,
-    })),
-  ];
+  const matchRows = isRanking
+    ? (result as { pairs: P2Pair[]; unmatched: string[] }).pairs.map(p => ({
+        round_id,
+        submission_a: p.a,
+        submission_b: p.b,
+        match_type:   "choice",
+        rank_a:       p.rankA,
+        rank_b:       p.rankB,
+      }))
+    : (result as { pairs: P1Pair[]; unmatched: string[] }).pairs.map(p => ({
+        round_id,
+        submission_a: p.a,
+        submission_b: p.b,
+        match_type:   "random",
+      }));
 
   const { data: insertedMatches, error: matchErr } = await supabase
     .from("matches")
@@ -229,9 +233,9 @@ serve(async (req: Request) => {
 
   // ── Return summary ────────────────────────────────────────────────────────
   return json({
-    success:     true,
-    piece1Pairs: p1.pairs.length,
-    piece2Pairs: p2.pairs.length,
-    unmatched:   [...p1.unmatched, ...p2.unmatched],
+    success:   true,
+    matchType: round.match_type,
+    pairs:     matchRows.length,
+    unmatched: result.unmatched,
   });
 });
