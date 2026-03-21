@@ -29,6 +29,7 @@ const styles = `
   .cam-wrap {
     width: 100%;
     margin-bottom: 14px;
+    overflow: hidden;
   }
 
   /* ── Idle / empty state ── */
@@ -182,12 +183,14 @@ const styles = `
 
   /* ── Captured thumbnail (confirmed state) ── */
   .cam-confirmed {
-    width: 100%; height: 160px; border-radius: 16px;
+    width: 100%; height: 160px; max-height: 160px; border-radius: 16px;
     position: relative; overflow: hidden;
     border: 2px solid #E8450A44;
+    flex-shrink: 0;
   }
   .cam-confirmed img {
-    width: 100%; height: 100%; object-fit: cover;
+    display: block; width: 100%; height: 100%;
+    max-height: 160px; object-fit: cover;
   }
   .cam-confirmed-bar {
     position: absolute; bottom: 0; left: 0; right: 0;
