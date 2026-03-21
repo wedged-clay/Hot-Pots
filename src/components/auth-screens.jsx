@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase/client";
+import PotIcon from "./PotIcon";
 
 // ============================================================
 // AUTH FLOW — Hot—Pots (Supabase Auth)
@@ -845,14 +846,14 @@ export default function AuthScreens({ onAuthComplete }) {
             </div>
 
             <div style={{background:"#FEF3C7", borderRadius:14, padding:"13px 16px", marginBottom:20, fontSize:12, color:"#92400E", lineHeight:1.6, border:"1px solid #D9770630"}}>
-              🏺 Don't have a code? Ask your studio admin — they can generate one from the admin dashboard.
+              <PotIcon size={14} color="#B45309" style={{ verticalAlign: "middle", marginRight: 6 }} /> Don't have a code? Ask your studio admin — they can generate one from the admin dashboard.
             </div>
 
             {authError && <div className="field-error" style={{marginBottom:8}}>⚠ {authError}</div>}
 
             <button className="auth-btn" disabled={loading}
               onClick={()=>handleInviteCode(inviteCode)}>
-              {loading ? "Verifying…" : "Join the Studio 🏺"}
+              {loading ? "Verifying…" : <span>Join the Studio <PotIcon size={16} color="white" style={{ verticalAlign: "middle", marginLeft: 4 }} /></span>}
             </button>
 
             <button className="auth-btn-ghost" disabled={loading}

@@ -1,4 +1,5 @@
 import { Component } from "react";
+import PotIcon from "./PotIcon";
 
 // ── Styles ────────────────────────────────────────────────────
 const styles = {
@@ -95,7 +96,7 @@ export default class ErrorBoundary extends Component {
     return (
       <div data-testid="error-boundary" style={styles.wrap}>
         <div style={styles.card}>
-          <div style={styles.emoji}>🏺</div>
+          <PotIcon size={52} color="#E8450A" style={{ marginBottom: 16 }} />
           <div style={styles.heading}>Something cracked</div>
           <div style={styles.body}>
             An unexpected error occurred in {label}. Your data is safe — this is just a display problem.

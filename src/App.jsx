@@ -5,6 +5,7 @@ import AuthScreens from "./components/auth-screens";
 import ErrorBoundary from "./components/ErrorBoundary";
 import PieceForm from "./components/PieceForm";
 import SortableRankRow from "./components/SortableRankRow";
+import PotIcon from "./components/PotIcon";
 import { usePWA } from "./hooks/usePWA";
 import { useAuth } from "./hooks/useAuth";
 import { useProfileStats } from "./hooks/useProfileStats";
@@ -535,7 +536,7 @@ export default function HotPotsApp() {
             position: "sticky", top: 0, zIndex: 9999,
             display: "flex", alignItems: "center", justifyContent: "center", gap: 12,
           }}>
-            🏺 A new version of Hot—Pots is ready!
+            <PotIcon size={16} color="white" style={{ verticalAlign: "middle", marginRight: 6 }} /> A new version of Hot—Pots is ready!
             <button onClick={applyUpdate} style={{
               background: "white", color: C.ember,
               border: "none", borderRadius: 8,
@@ -601,6 +602,7 @@ export default function HotPotsApp() {
           {tab==="home" && (
             <>
               <div className="round-banner">
+                <PotIcon size={64} color="white" style={{ position: "absolute", right: 16, top: "50%", transform: "translateY(-50%)", opacity: 0.12, pointerEvents: "none" }} />
                 <div className="round-status">● Open Now</div>
                 <div className="round-title">{round?.title ?? "Loading…"}</div>
                 {(() => {
@@ -648,7 +650,7 @@ export default function HotPotsApp() {
                   <div className="gallery-card" key={p.id}>
                     {p.photoUrl
                       ? <img src={p.photoUrl} alt={p.name} style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:6}} />
-                      : <span className="gallery-emoji">🏺</span>}
+                      : <PotIcon size={32} color={C.mahogany} style={{ display: "block", margin: "0 auto 8px" }} />}
                     <div className="gallery-name">{p.name}</div>
                     <div className="gallery-maker">{p.maker}</div>
                     <div className="gallery-tags">
@@ -770,7 +772,7 @@ export default function HotPotsApp() {
                           <div className="gallery-card" key={p.id}>
                             {p.photoUrl
                               ? <img src={p.photoUrl} alt={p.name} style={{width:"100%",height:80,objectFit:"cover",borderRadius:10,marginBottom:6}} />
-                              : <span className="gallery-emoji">🏺</span>}
+                              : <PotIcon size={32} color={C.mahogany} style={{ display: "block", margin: "0 auto 8px" }} />}
                             <div className="gallery-name">{p.name}</div>
                             <div className="gallery-maker">{p.maker}</div>
                             <div className="gallery-tags">
@@ -791,7 +793,7 @@ export default function HotPotsApp() {
                     disabled={rankings.length===0 || isSubmitting}
                     style={{opacity: (rankings.length===0 || isSubmitting) ? 0.5 : 1, cursor: (rankings.length===0 || isSubmitting)?"not-allowed":"pointer"}}
                     onClick={handleSubmitPieces}>
-                    Submit Both Pieces 🏺
+                    Submit Both Pieces <PotIcon size={16} color="currentColor" style={{ verticalAlign: "middle", marginLeft: 4 }} />
                   </button>
                   {rankings.length===0 && (
                     <div style={{textAlign:"center", fontSize:12, color:"#92400E", marginTop:8}}>
@@ -829,7 +831,7 @@ export default function HotPotsApp() {
                       <div key={p.label} style={{flex:1, borderRadius:12, overflow:"hidden", background:C.sand, border:`1px solid ${C.ochre}33`}}>
                         {p.url
                           ? <img src={p.url} alt={p.name} style={{width:"100%", aspectRatio:"1", objectFit:"cover", display:"block"}} />
-                          : <div style={{width:"100%", aspectRatio:"1", display:"flex", alignItems:"center", justifyContent:"center", fontSize:28}}>🏺</div>
+                          : <div style={{width:"100%", aspectRatio:"1", display:"flex", alignItems:"center", justifyContent:"center"}}><PotIcon size={28} color={C.mahogany} /></div>
                         }
                         <div style={{padding:"6px 8px"}}>
                           <div style={{fontSize:10, color:C.mahogany, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.05em"}}>{p.label}</div>
@@ -841,7 +843,7 @@ export default function HotPotsApp() {
                 </div>
               ))}
               <div style={{textAlign:"center", padding:"28px 0", color:"#92400E", fontSize:13}}>
-                More swaps appear after each round closes 🏺
+                More swaps appear after each round closes <PotIcon size={14} color={C.mist} style={{ verticalAlign: "middle", marginLeft: 4 }} />
               </div>
             </>
           )}
@@ -972,7 +974,7 @@ export default function HotPotsApp() {
                 })}
 
                 <div style={{textAlign:"center", padding:"20px 0 10px", color:"#92400E", fontSize:12}}>
-                  New conversations appear here when matches are made 🏺
+                  New conversations appear here when matches are made <PotIcon size={14} color={C.mist} style={{ verticalAlign: "middle", marginLeft: 4 }} />
                 </div>
               </div>
             );
@@ -1061,7 +1063,7 @@ export default function HotPotsApp() {
         <div className="bottom-nav">
           {[
             {id:"home",    icon:"🏠", label:"Home"},
-            {id:"enter",   icon:"🏺", label:"Enter"},
+            {id:"enter",   icon:<PotIcon size={20} color="currentColor" />, label:"Enter"},
             {id:"history", icon:"🤝", label:"Swaps"},
             {id:"messages",icon:"💬", label:"Messages"},
             {id:"profile", icon:"👤", label:"Profile"},
@@ -1095,8 +1097,8 @@ export default function HotPotsApp() {
               background: C.sand, borderRadius: 24, padding: 32, width: "100%", maxWidth: 360,
               textAlign: "center", boxShadow: "0 12px 48px rgba(0,0,0,0.35)",
             }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontSize: 56, marginBottom: 12, lineHeight: 1 }}>🏺</div>
-              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: C.bark, marginBottom: 6 }}>
+              <PotIcon size={56} color={C.ember} style={{ marginBottom: 12 }} />
+              <div style={{ fontFamily: "'Playfair Display',serif", fontStyle: "italic", fontSize: 22, color: C.bark, marginBottom: 6 }}>
                 You have a new swap!
               </div>
               <div style={{ fontSize: 14, color: C.mahogany, marginBottom: 20 }}>
@@ -1110,7 +1112,7 @@ export default function HotPotsApp() {
                   <div key={p.label} style={{ flex: 1, borderRadius: 12, overflow: "hidden", background: "white", border: `1px solid ${C.ochre}33` }}>
                     {p.url
                       ? <img src={p.url} alt={p.name} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }} />
-                      : <div style={{ width: "100%", aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28 }}>🏺</div>
+                      : <div style={{ width: "100%", aspectRatio: "1", display: "flex", alignItems: "center", justifyContent: "center" }}><PotIcon size={28} color={C.mahogany} /></div>
                     }
                     <div style={{ padding: "6px 8px" }}>
                       <div style={{ fontSize: 10, color: C.mahogany, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{p.label}</div>
