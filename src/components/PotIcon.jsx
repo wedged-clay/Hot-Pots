@@ -1,4 +1,4 @@
-// Tall vase SVG icon — narrow foot, dramatic hip flare, pinched waist, graceful neck.
+// Tulip vase SVG icon — slim neck, belly curves inward, top flares outward like a trumpet.
 // Props: size (number, default 24), color (string, default "currentColor")
 export default function PotIcon({ size = 24, color = "currentColor", style, ...props }) {
   return (
@@ -11,34 +11,33 @@ export default function PotIcon({ size = 24, color = "currentColor", style, ...p
       style={style}
       {...props}
     >
-      {/* Body — traces rim → neck → waist pinch → dramatic hip flare → narrow foot */}
+      {/* Body — flared rim → neck curves inward → belly pinches → tapers to slender foot */}
       <path
-        d="M 14 8
-           C 14 5 34 5 34 8
-           C 34 11 31 14 31 17
-           C 30 20 29 21 29 23
-           C 29 29 43 30 43 36
-           C 43 41 37 44 30 45
-           L 18 45
-           C 11 44 5 41 5 36
-           C 5 30 19 29 19 23
-           C 19 21 18 20 17 17
-           C 17 14 14 11 14 8 Z"
+        d="M 13 8
+           C 16 11 18 14 19 18
+           C 20 22 19 26 17 30
+           C 14 34 12 38 14 42
+           C 16 44 20 45 24 45
+           C 28 45 32 44 34 42
+           C 36 38 34 34 31 30
+           C 29 26 28 22 29 18
+           C 30 14 32 11 35 8
+           C 31 5 17 5 13 8 Z"
         fill={color}
       />
-      {/* Rim lip — flares slightly wider than the neck */}
+      {/* Rim lip — wide trumpet flare */}
       <path
-        d="M 11 8 C 17 4 31 4 37 8"
+        d="M 11 8 C 15 3 33 3 37 8"
         stroke={color}
         strokeWidth="3"
         strokeLinecap="round"
         fill="none"
       />
       {/* Foot ring */}
-      <ellipse cx="24" cy="45" rx="7" ry="1.5" fill={color} opacity="0.45" />
-      {/* Sheen — curved highlight following the hip */}
+      <ellipse cx="24" cy="45" rx="6" ry="1.5" fill={color} opacity="0.4" />
+      {/* Sheen — curved highlight following the belly */}
       <path
-        d="M 7 29 C 6 33 6 37 8 41"
+        d="M 14 30 C 13 34 13 38 15 42"
         stroke="white"
         strokeWidth="2"
         strokeLinecap="round"
